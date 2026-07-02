@@ -139,6 +139,17 @@ def search_rag(query, distortion_label):
         }
         return f"[테스트 모드]\n{dummy.get(distortion_label, '인지재구성 기법: 다른 관점에서 증거를 기반으로 생각을 재평가해보세요.')}"
     try:
+        from openai import AzureOpenAI
+        ai_client = AzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_KEY"),
+            api_version="2024-02-01",
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        )
+        vec = ai_client.embeddings.create(
+            model=os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-small"),
+            input=f"{distortion_label} {query}"
+        ).data[0].embedding
+
         url = f"{AZURE_SEARCH_ENDPOINT}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version=2024-05-01-preview"
         headers = {"api-key": AZURE_SEARCH_KEY, "Content-Type": "application/json"}
         body = {
@@ -146,6 +157,12 @@ def search_rag(query, distortion_label):
             "queryType": "semantic",
             "semanticConfiguration": "cbt-semantic-config",
             "top": 3,
+            "vectorQueries": [{
+                "kind": "vector",
+                "vector": vec,
+                "fields": "content_vector",
+                "k": 5
+            }]
         }
         r = requests.post(url, headers=headers, json=body, timeout=10).json()
         docs = r.get("value", [])
