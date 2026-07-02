@@ -1,0 +1,8 @@
+streamlit
+requests
+python-dotenv
+azure-ai-contentsafety
+azure-cosmos
+plotly
+pandas
+streamlit-geolocation
