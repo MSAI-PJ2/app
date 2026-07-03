@@ -1,8 +1,9 @@
-streamlit
-requests
+streamlit>=1.38
+plotly>=5.19
+pandas
 python-dotenv
+requests
+openai
+streamlit-geolocation
 azure-ai-contentsafety
 azure-cosmos
-plotly
-pandas
-streamlit-geolocation
