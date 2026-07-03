@@ -56,12 +56,6 @@ if "queued_input" not in st.session_state:
     st.session_state.queued_input = None   # 빠른 답장 칩 → 메시지 큐
 
 
-class _NullPlaceholder:
-    """개발자 모드 OFF 시 pipeline/distortion 패널 호출을 조용히 무시하는 더미"""
-    def markdown(self, *args, **kwargs): pass
-    def caption(self, *args, **kwargs): pass
-
-
 def is_connected(val):
     return val and val != "여기에_나중에_입력"
 
@@ -185,12 +179,8 @@ def render_crisis_result(result: dict):
 </div>""", unsafe_allow_html=True)
 
 
-# ── 개발자 모드 토글 (사이드바 하단 — 기존 기능 유지) ─────────────
-with st.sidebar:
-    st.divider()
-    DEBUG_MODE = st.toggle("🔧 개발자 모드", value=False, help="파이프라인 처리 단계 보기 (심사/디버깅용)")
-
 # ── 레이아웃: [채팅 패널 | 사이드 패널] (chat.tsx grid 이식) ──────
+# 처리 단계 패널은 항상 노출 (팀 결정: 심사/시연 시 내부 동작을 투명하게 보여주는 쪽으로 확정)
 col_chat, col_side = st.columns([2, 1], gap="medium")
 
 # ═══════════ 채팅 패널 ═══════════
@@ -269,20 +259,27 @@ with col_chat:
     if st.session_state.awaiting_location:
         st.markdown('<div class="crisis-card">', unsafe_allow_html=True)
         st.markdown("📍 **가까운 기관을 안내해드릴게요.**")
-        st.caption("아래 버튼을 눌러 위치 권한을 허용하면 자동으로 지역을 찾아드려요.")
 
-        location = streamlit_geolocation()
+        # 위치 동의는 설문(4_설문.py)의 동의란에서 미리 받아둔 값을 사용 — 여기서 다시 묻지 않음
+        _profile = st.session_state.get("user_profile") or {}
+        location_consent = bool(_profile.get("privacy", {}).get("allow_location_use"))
 
         sido_gps, sigungu_gps = None, None
-        if location and location.get("latitude"):
-            lat, lon = location["latitude"], location["longitude"]
-            region = coords_to_address(lat, lon)
-            if region:
-                sido_gps = region["시도"]
-                sigungu_gps = region["시군구"]
-                st.success(f"📍 위치 자동 감지: {sido_gps} {sigungu_gps}")
-            else:
-                st.warning("좌표를 행정구역으로 변환하지 못했어요. 아래에서 직접 선택해주세요.")
+        if location_consent:
+            st.caption("설문에서 위치 정보 사용에 동의하셨어요 — 자동으로 가까운 지역을 찾아드릴게요.")
+            location = streamlit_geolocation()
+
+            if location and location.get("latitude"):
+                lat, lon = location["latitude"], location["longitude"]
+                region = coords_to_address(lat, lon)
+                if region:
+                    sido_gps = region["시도"]
+                    sigungu_gps = region["시군구"]
+                    st.success(f"📍 위치 자동 감지: {sido_gps} {sigungu_gps}")
+                else:
+                    st.warning("좌표를 행정구역으로 변환하지 못했어요. 아래에서 직접 선택해주세요.")
+        else:
+            st.caption("위치 정보 사용에 동의하지 않으셨어요. 아래에서 지역을 직접 선택해주세요. (설문에서 동의하시면 다음부터는 자동으로 찾아드려요)")
 
         if sido_gps:
             if st.button(f"📍 {sido_gps} {sigungu_gps} 기준으로 기관 찾기", key="crisis_gps_btn"):
@@ -326,25 +323,21 @@ with col_chat:
 
 # ═══════════ 사이드 패널 (chat.tsx aside) ═══════════
 with col_side:
-    # 개발자 모드: 파이프라인 처리 단계 패널 (기존 기능 유지)
-    if DEBUG_MODE:
-        st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:1rem;">
-        <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
-        pipeline_placeholder = st.empty()
-        pipeline_placeholder.markdown("""
-<div class="pipeline-step">⬜ ① 안전 게이트 (대기)</div>
-<div class="pipeline-step">⬜ ② 인지왜곡 분류기 (대기)</div>
-<div class="pipeline-step">⬜ ③ LLM 라우터 (대기)</div>
-<div class="pipeline-step">⬜ ④ RAG / STS (대기)</div>
-<div class="pipeline-step">⬜ ⑤ Azure OpenAI (대기)</div>
+    # 처리 단계 패널 (항상 노출 — 심사/시연 시 내부 동작을 투명하게 보여주는 쪽으로 팀 확정)
+    st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:1rem;">
+    <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
+    pipeline_placeholder = st.empty()
+    pipeline_placeholder.markdown("""
+<div class="pipeline-step">⬜ ① 안전하게 살펴보는 중 (대기)</div>
+<div class="pipeline-step">⬜ ② 생각 패턴 살펴보는 중 (대기)</div>
+<div class="pipeline-step">⬜ ③ 답변 방식 정하는 중 (대기)</div>
+<div class="pipeline-step">⬜ ④ 참고할 자료 찾는 중 (대기)</div>
+<div class="pipeline-step">⬜ ⑤ 답변 준비하는 중 (대기)</div>
 """, unsafe_allow_html=True)
-        st.markdown('<div class="font-display" style="margin:8px 0 4px;">🏷️ 감지된 왜곡 유형</div>', unsafe_allow_html=True)
-        distortion_placeholder = st.empty()
-        distortion_placeholder.caption("입력 후 결과가 표시됩니다")
-        st.divider()
-    else:
-        pipeline_placeholder = _NullPlaceholder()
-        distortion_placeholder = _NullPlaceholder()
+    st.markdown('<div class="font-display" style="margin:8px 0 4px;">🏷️ 감지된 왜곡 유형</div>', unsafe_allow_html=True)
+    distortion_placeholder = st.empty()
+    distortion_placeholder.caption("입력 후 결과가 표시됩니다")
+    st.divider()
 
     # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
     hist = st.session_state.distortion_history
@@ -393,8 +386,8 @@ with col_side:
 
 # ── 파이프라인 실행 (변경 없음 — 시각/메타 저장만 추가) ───────────
 def render_pipeline(steps):
-    labels = {"safety": "① 안전 게이트", "classify": "② 인지왜곡 분류기",
-              "router": "③ LLM 라우터", "rag": "④ RAG / STS", "openai": "⑤ Azure OpenAI"}
+    labels = {"safety": "① 안전하게 살펴보는 중", "classify": "② 생각 패턴 살펴보는 중",
+              "router": "③ 답변 방식 정하는 중", "rag": "④ 참고할 자료 찾는 중", "openai": "⑤ 답변 준비하는 중"}
     icons  = {"done": "✅", "processing": "⏳", "pending": "⬜", "error": "❌", "crisis": "🚨"}
     html = ""
     for key, (icon_key, status) in steps.items():
@@ -458,10 +451,8 @@ if user_input:
         ai_response = generate_openai_response(user_input, distortion_name, rag_context, route)
     steps["openai"] = ("✅", "done"); render_pipeline(steps)
 
-    # 응답 저장 — Lovable 말풍선 메타칩용으로 meta 추가
-    # (개발자 모드 OFF일 때 메타칩 노출은 '진단 라벨 셀프 부착' 우려가 있어
-    #  DEBUG_MODE가 켜진 세션에서만 칩을 저장/표시)
-    meta = {"distortion": distortion_name, "confidence": confidence} if DEBUG_MODE else None
+    # 응답 저장 — Lovable 말풍선 메타칩용으로 meta 추가 (처리단계 패널과 함께 항상 노출)
+    meta = {"distortion": distortion_name, "confidence": confidence}
     st.session_state.messages.append({"role": "assistant", "content": ai_response,
                                       "time": datetime.now().strftime("%H:%M"), "meta": meta})
     st.session_state.distortion_history.append({
