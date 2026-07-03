@@ -17,7 +17,7 @@ st.set_page_config(
 
 apply_theme()
 render_sidebar(active="home")
-render_topbar()
+render_topbar(show_new_chat=False)
 
 
 # ── Azure 서비스 연결 상태 확인 (기존 로직 유지 — API 호출 없음) ──
@@ -64,7 +64,7 @@ hero_bg = (
     "background-image: linear-gradient(135deg, #c0f8e5 0%, #eaf7ce 55%, #fdf1c7 100%);"
 )
 st.markdown(f"""
-<div class="ac-card" style='overflow:hidden; margin-bottom:0; {hero_bg}
+<div class="ac-card" style='position:relative; overflow:hidden; margin-bottom:0; {hero_bg}
      background-size:cover; background-position:center 65%;
      border-bottom-left-radius:0; border-bottom-right-radius:0;'>
   <div style="padding:7.5rem 1.8rem 1.2rem;">
@@ -72,14 +72,11 @@ st.markdown(f"""
     <h1 style="margin:.5rem 0 .2rem; font-size:2rem;">어서와요, 오늘도 마음숲에 오신 걸 환영해요</h1>
     <p style="margin:0; font-size:.92rem; color:{P['muted_fg']};">
       작은 생각도 함께 나누면 큰 나무가 돼요. 편하게 대화를 시작해보세요.</p>
+    <a href="/채팅" target="_self" class="btn-primary"
+       style="position:absolute; right:1.8rem; bottom:1.4rem;">💌 대화 시작하기</a>
   </div>
 </div>
 """, unsafe_allow_html=True)
-hero_l, hero_r = st.columns([4, 1])
-with hero_r:
-    st.markdown('<div class="hero-cta">', unsafe_allow_html=True)
-    st.page_link(resolve_page("pages/1_채팅.py"), label="💌 대화 시작하기", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
 # ── 마을 상점 상태 + 여울이 주민카드 (index.tsx grid 섹션) ────────
@@ -178,27 +175,27 @@ st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
 # ── 메뉴 카드 3개 (index.tsx Menu cards) ─────────────────────────
 menus = [
-    ("pages/1_채팅.py", "💬", "대화하기", "편지 쓰듯 마음을 적어보세요. 마을 친구가 함께 읽고 재구성해요.", "#c0f8e5", "chip-leaf"),
-    ("pages/2_분석대시보드.py", "📊", "마음 일기", "지난 대화들을 모아 인지왜곡 분포와 변화 흐름을 볼 수 있어요.", "#D9B8E8", "chip-lilac"),
-    ("pages/3_생각도감.py", "📖", "생각도감", "10가지 인지왜곡 유형을 도감처럼 하나씩 알아가요.", "#E39A86", "chip-coral"),
+    ("/채팅", "💬", "대화하기", "편지 쓰듯 마음을 적어보세요. 마을 친구가 함께 읽고 재구성해요.", "#c0f8e5", "chip-leaf"),
+    ("/분석대시보드", "📊", "마음 일기", "지난 대화들을 모아 인지왜곡 분포와 변화 흐름을 볼 수 있어요.", "#D9B8E8", "chip-lilac"),
+    ("/생각도감", "📖", "생각도감", "10가지 인지왜곡 유형을 도감처럼 하나씩 알아가요.", "#E39A86", "chip-coral"),
 ]
 cols = st.columns(3, gap="medium")
-for col, (page, emoji, title, desc, accent, tone) in zip(cols, menus):
+for col, (url, emoji, title, desc, accent, tone) in zip(cols, menus):
     with col:
         st.markdown(f"""
-        <div class="ac-card menu-card-top" style="overflow:hidden;">
+        <div class="ac-card" style="overflow:hidden;">
           <div style="height:8px;background:{accent};"></div>
-          <div style="padding:1.4rem 1.4rem .6rem;">
+          <div style="padding:1.4rem 1.4rem 1.3rem;">
             <div class="ac-chip {tone}" style="width:46px;height:46px;justify-content:center;
                  border-radius:16px;font-size:22px;padding:0;margin-bottom:12px;">{emoji}</div>
             <h3 style="margin:0 0 4px;font-size:1.05rem;">{emoji} {title}</h3>
-            <p style="margin:0;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
+            <p style="margin:0 0 10px;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
+            <a href="{url}" target="_self"
+               style="display:inline-block;color:{P['primary']};font-weight:800;
+                      font-size:.85rem;text-decoration:none;">시작하기 →</a>
           </div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown('<div class="menu-card-cta">', unsafe_allow_html=True)
-        st.page_link(resolve_page(page), label="시작하기 →", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
