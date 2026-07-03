@@ -98,7 +98,12 @@ def apply_theme():
             radial-gradient(circle at 40% 80%, rgba(91,206,168,0.30) 0 7px, transparent 8px);
         background-size: 320px 320px;
     }}
-    .block-container {{ padding-top: 1.2rem; max-width: 1200px; }}
+    .block-container {{ padding-top: 1.8rem; max-width: 1200px; }}
+
+    /* Streamlit 기본 헤더(Deploy 버튼 등)가 커스텀 상단바 위에 겹쳐서
+       필(pill)이 잘려 보이는 문제 방지 — 완전 커스텀 UI라 기본 헤더 불필요 */
+    header[data-testid="stHeader"] {{ display: none !important; }}
+    div[data-testid="stToolbar"] {{ display: none !important; }}
 
     /* ── 사이드바: 민트 아이콘 레일 (app-layout.tsx <aside>) ── */
     [data-testid="stSidebarNav"] {{ display: none; }}   /* 기본 페이지 네비 숨김 */
@@ -159,18 +164,6 @@ def apply_theme():
         display: flex; flex-direction: column; align-items: center; gap: 2px;
         text-decoration: none;
     }}
-    /* 상단 바 새 대화 버튼 (st.page_link → primary pill) */
-    .topbar + div [data-testid="stPageLink"],
-    div[data-testid="column"] [data-testid="stPageLink"] {{
-        background: {p['primary']}; border-radius: 999px;
-        box-shadow: 0 10px 30px -8px rgba(40,138,107,0.35);
-        padding: 8px 6px;
-    }}
-    div[data-testid="column"] [data-testid="stPageLink"] p {{
-        color: {p['primary_fg']} !important; font-weight: 800 !important;
-        text-align: center; font-size: 13px !important;
-    }}
-
     /* ── 상단 바 (app-layout.tsx <header>) ─────────────────── */
     .topbar {{
         display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -195,22 +188,22 @@ def apply_theme():
     }}
     a.btn-primary:hover {{ filter: brightness(1.05); }}
 
-    /* 히어로 CTA / 메뉴카드 CTA (page_link 래퍼) */
-    .hero-cta [data-testid="stPageLink"] {{
-        background: {p['primary']}; border-radius: 999px; padding: 10px 8px;
-        box-shadow: 0 10px 30px -8px rgba(40,138,107,0.35);
+    /* 네이티브 위젯을 감싸는 카드 — st.container(border=True) 공통 스타일
+       (로그인/설문 폼처럼 real Streamlit 위젯을 카드 안에 넣어야 하는 곳에서 사용) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {{
+        border-radius: 24px !important;
+        border-color: {p['border']} !important;
+        background: {p['card']} !important;
+        box-shadow: 0 6px 20px -6px rgba(45,143,110,0.25);
     }}
-    .hero-cta [data-testid="stPageLink"] p {{
-        color: {p['primary_fg']} !important; font-weight: 800 !important; text-align: center;
+
+    /* multiselect 선택 태그 — 기본 Streamlit 빨간톤이 자극적이라 테마 톤으로 교체 */
+    span[data-baseweb="tag"] {{
+        background-color: {p['primary']} !important;
+        border-radius: 999px !important;
     }}
-    .menu-card-top {{ margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; }}
-    .menu-card-cta {{
-        background: {p['card']}; border: 1px solid {p['border']}; border-top: none;
-        border-radius: 0 0 28px 28px; padding: 0 1.4rem 1rem; margin-bottom: 1rem;
-    }}
-    .menu-card-cta [data-testid="stPageLink"] p {{
-        color: {p['primary']} !important; font-weight: 800 !important; font-size: .85rem !important;
-    }}
+    span[data-baseweb="tag"] span {{ color: {p['primary_fg']} !important; }}
+    span[data-baseweb="tag"] svg {{ fill: {p['primary_fg']} !important; }}
 
     /* ── ac-card / ac-chip 유틸 (styles.css @utility) ───────── */
     .ac-card {{
@@ -360,6 +353,7 @@ NAV = [
     ("chat",      "pages/1_채팅.py",             "💬", "대화하기"),
     ("analytics", "pages/2_분석대시보드.py",       "📊", "마음 일기"),
     ("types",     "pages/3_생각도감.py",          "📖", "생각도감"),
+    ("survey",    "pages/4_설문.py",             "📝", "설문"),
 ]
 
 
@@ -374,6 +368,9 @@ def render_sidebar(active: str = "home"):
             f'<div style="display:flex;flex-direction:column;align-items:center;width:100%;">{logo_html}</div>',
             unsafe_allow_html=True,
         )
+        # 캐릭터 바로 아래 로그인 진입 버튼 (요청: 로고 누르면 로그인으로)
+        st.page_link(resolve_page("pages/0_로그인.py"), label="로그인", icon="🔐", use_container_width=True)
+        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
         for key, page, icon, label in NAV:
             st.page_link(resolve_page(page), label=label, icon=icon, use_container_width=True)
         st.markdown(
@@ -384,7 +381,9 @@ def render_sidebar(active: str = "home"):
 
 
 # ── 상단 바 (app-layout.tsx header 이식) ─────────────────────────
-def render_topbar():
+def render_topbar(show_new_chat: bool = True):
+    """show_new_chat=False로 호출하면 우측 '새 대화' 버튼을 숨김
+    (홈처럼 이미 자체 CTA가 있는 페이지에서 중복을 피하기 위함)"""
     now = datetime.now()
     ampm = "오전" if now.hour < 12 else "오후"
     h = now.hour % 12 or 12
@@ -397,6 +396,11 @@ def render_topbar():
 </div>
 """, unsafe_allow_html=True)
     with col_btn:
-        st.page_link(resolve_page("pages/1_채팅.py"), label="💌 새 대화", use_container_width=True)
+        if show_new_chat:
+            st.markdown(
+                '<a href="/채팅" target="_self" class="btn-primary" '
+                'style="width:100%;justify-content:center;">💌 새 대화</a>',
+                unsafe_allow_html=True,
+            )
     st.markdown(f'<div style="border-bottom:1px solid {PALETTE["border"]};margin:8px 0 1.4rem;"></div>',
                 unsafe_allow_html=True)
