@@ -1,286 +1,209 @@
-# ─────────────────────────────────────────────
-# app.py  ←  이 파일이 앱의 "첫 화면(홈)"이에요
-# streamlit run app.py  명령으로 실행해요
-# ─────────────────────────────────────────────
+import os
 
 import streamlit as st
-import os
 from dotenv import load_dotenv
+
+from ui_theme import PALETTE as P
+from ui_theme import apply_theme, img_b64, render_sidebar, render_topbar, resolve_page
 
 load_dotenv()
 
-# ── 페이지 기본 설정 ──────────────────────────
 st.set_page_config(
-    page_title="CBT 인지왜곡 분석 대시보드",
-    page_icon="🧠",
+    page_title="마을 광장 · 마음숲",
+    page_icon="🍃",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── 스타일 (색상, 폰트 등) ────────────────────
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #EEF0F3;
-    }
-    .main-title {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #1E3A5F;
-        margin-bottom: 0.2rem;
-    }
-    .sub-title {
-        font-size: 1rem;
-        color: #6B7280;
-        margin-bottom: 2rem;
-    }
-    /* 뉴모피즘 카드: 배경과 같은 톤 + 이중 그림자(밝은쪽/어두운쪽)로 입체감 표현 */
-    .menu-card {
-        background: #EEF0F3;
-        border-radius: 20px;
-        padding: 2rem;
-        box-shadow:
-            8px 8px 16px rgba(163, 177, 198, 0.5),
-            -8px -8px 16px rgba(255, 255, 255, 0.8);
-        margin-bottom: 1rem;
-        transition: box-shadow 0.2s, transform 0.2s;
-        border: none;
-    }
-    .menu-card:hover {
-        transform: translateY(-2px);
-        box-shadow:
-            10px 10px 20px rgba(163, 177, 198, 0.55),
-            -10px -10px 20px rgba(255, 255, 255, 0.9);
-    }
-    .menu-card h3 {
-        color: #1E3A5F;
-        margin-bottom: 0.5rem;
-    }
-    .menu-card p {
-        color: #6B7280;
-        font-size: 0.9rem;
-    }
-    /* 뉴모피즘 아이콘 배지: 눌려있는(inset) 느낌 */
-    .neu-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 14px;
-        background: #EEF0F3;
-        box-shadow:
-            inset 4px 4px 8px rgba(163, 177, 198, 0.5),
-            inset -4px -4px 8px rgba(255, 255, 255, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        margin-bottom: 12px;
-    }
-    .badge-ready {
-        background: #D1FAE5;
-        color: #065F46;
-        padding: 2px 10px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    .badge-pending {
-        background: #FEF3C7;
-        color: #92400E;
-        padding: 2px 10px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    /* 상단 연결 상태 - 타이틀 아래 컴팩트하게 배치 */
-    .status-row {
-        background: #EEF0F3;
-        border-radius: 14px;
-        padding: 0.7rem 1.25rem;
-        box-shadow:
-            5px 5px 10px rgba(163, 177, 198, 0.5),
-            -5px -5px 10px rgba(255, 255, 255, 0.85);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1.6rem;
-        margin: 0.5rem 0 1.5rem;
-        width: fit-content;
-    }
-    .status-item {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        font-size: 0.85rem;
-        color: #6B7280;
-    }
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-    .status-dot.on { background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
-    .status-dot.off { background: #EF4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
-    /* 메뉴카드 상단 악센트 바 */
-    .card-accent {
-        height: 4px;
-        width: 36px;
-        border-radius: 4px;
-        margin-bottom: 14px;
-    }
-    .card-accent.teal { background: #5EC9B0; }
-    .card-accent.lavender { background: #A78BFA; }
-    /* 인지왜곡 10개 유형 리스트 - 메뉴카드/지표카드와 동일한 뉴모피즘 톤 */
-    .type-row {
-        background: #EEF0F3;
-        border-radius: 12px;
-        padding: 0.7rem 1rem;
-        margin: 0.4rem 0;
-        box-shadow:
-            3px 3px 6px rgba(163, 177, 198, 0.45),
-            -3px -3px 6px rgba(255, 255, 255, 0.8);
-        font-size: 0.9rem;
-        color: #374151;
-    }
-    .type-row b { color: #1E3A5F; }
-    /* 메뉴카드 전체를 클릭 가능한 링크로 감쌀 때 기본 링크 스타일 제거 */
-    a.card-link, a.card-link:hover, a.card-link:visited {
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-</style>
-""", unsafe_allow_html=True)
+apply_theme()
+render_sidebar(active="home")
+render_topbar()
 
 
-# ── Azure 서비스 연결 상태 확인 함수들 ────────
-# 실제 API를 호출하지 않고, .env에 필요한 값들이 채워져 있는지만 확인해요.
-# → 비용 발생 없음. 단, "설정값이 있다"는 것과 "실제로 정상 작동한다"는 것은
-#   다를 수 있어요 — 진짜 작동 여부는 채팅 페이지에서 직접 확인하세요.
-
+# ── Azure 서비스 연결 상태 확인 (기존 로직 유지 — API 호출 없음) ──
 def is_connected(val):
     return bool(val) and val != "여기에_나중에_입력"
 
 
 def check_content_safety_configured() -> bool:
-    return (
-        is_connected(os.getenv("CONTENT_SAFETY_ENDPOINT"))
-        and is_connected(os.getenv("CONTENT_SAFETY_KEY"))
-    )
+    return (is_connected(os.getenv("CONTENT_SAFETY_ENDPOINT"))
+            and is_connected(os.getenv("CONTENT_SAFETY_KEY")))
 
 
 def check_search_configured() -> bool:
-    return (
-        is_connected(os.getenv("AZURE_SEARCH_ENDPOINT"))
-        and is_connected(os.getenv("AZURE_SEARCH_KEY"))
-        and is_connected(os.getenv("AZURE_SEARCH_INDEX"))
-    )
+    return (is_connected(os.getenv("AZURE_SEARCH_ENDPOINT"))
+            and is_connected(os.getenv("AZURE_SEARCH_KEY"))
+            and is_connected(os.getenv("AZURE_SEARCH_INDEX")))
 
 
 def check_openai_configured() -> bool:
-    return (
-        is_connected(os.getenv("AZURE_OPENAI_ENDPOINT"))
-        and is_connected(os.getenv("AZURE_OPENAI_KEY"))
-        and is_connected(os.getenv("AZURE_OPENAI_DEPLOYMENT"))
-    )
+    return (is_connected(os.getenv("AZURE_OPENAI_ENDPOINT"))
+            and is_connected(os.getenv("AZURE_OPENAI_KEY"))
+            and is_connected(os.getenv("AZURE_OPENAI_DEPLOYMENT")))
 
 
 def check_ml_configured() -> bool:
-    return (
-        is_connected(os.getenv("AZURE_ML_ENDPOINT"))
-        and is_connected(os.getenv("AZURE_ML_KEY"))
-    )
+    return (is_connected(os.getenv("AZURE_ML_ENDPOINT"))
+            and is_connected(os.getenv("AZURE_ML_KEY")))
 
 
-# 실제 상태 확인 (API 호출 없이 즉시 처리됨)
-safety_connected = check_content_safety_configured()
-ml_connected = check_ml_configured()
-search_connected = check_search_configured()
-openai_connected = check_openai_configured()
+services = [
+    # (이름, 별명, 이모지, 연결여부, 톤)  — index.tsx services[] 이식
+    ("Content Safety",   "안전 게이트",   "🛡️", check_content_safety_configured(), "chip-leaf"),
+    ("인지왜곡 분류기",     "생각 감별사",   "🧠", check_ml_configured(),              "chip-coral"),
+    ("AI Search (RAG)",  "지식 도서관",   "🔍", check_search_configured(),          "chip-sky"),
+    ("Azure OpenAI",     "따뜻한 재구성", "✨", check_openai_configured(),          "chip-sunny"),
+]
+all_on = all(on for _, _, _, on, _ in services)
 
-
-# ── 홈 화면 본문 ──────────────────────────────
-
-st.markdown('<div class="main-title">🧠 CBT 인지왜곡 분석 대시보드</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Korean Cognitive Behavioral Therapy Chatbot · MSAI_PJ2_Self</div>', unsafe_allow_html=True)
-
-# Azure 연결 상태 - 별도 섹션 없이 타이틀 바로 아래 한 줄로 컴팩트하게
-def _dot(connected: bool) -> str:
-    return '<span class="status-dot on"></span>' if connected else '<span class="status-dot off"></span>'
-
+# ── 히어로 (index.tsx Hero 섹션) ──────────────────────────────────
+hero = img_b64("village-hero.jpg")
+hero_bg = (
+    f'background-image: linear-gradient(to top, rgba(255,248,231,0.96) 8%, rgba(255,248,231,0.45) 45%, transparent), url("{hero}");'
+    if hero else
+    "background-image: linear-gradient(135deg, #c0f8e5 0%, #eaf7ce 55%, #fdf1c7 100%);"
+)
 st.markdown(f"""
-<div class="status-row">
-    <div class="status-item">{_dot(safety_connected)} Content Safety</div>
-    <div class="status-item">{_dot(ml_connected)} 인지왜곡 분류기</div>
-    <div class="status-item">{_dot(search_connected)} AI Search</div>
-    <div class="status-item">{_dot(openai_connected)} Azure OpenAI</div>
+<div class="ac-card" style='overflow:hidden; margin-bottom:0; {hero_bg}
+     background-size:cover; background-position:center 65%;
+     border-bottom-left-radius:0; border-bottom-right-radius:0;'>
+  <div style="padding:7.5rem 1.8rem 1.2rem;">
+    <span class="ac-chip chip-sunny">🍃 오늘의 마을</span>
+    <h1 style="margin:.5rem 0 .2rem; font-size:2rem;">어서와요, 오늘도 마음숲에 오신 걸 환영해요</h1>
+    <p style="margin:0; font-size:.92rem; color:{P['muted_fg']};">
+      작은 생각도 함께 나누면 큰 나무가 돼요. 편하게 대화를 시작해보세요.</p>
+  </div>
 </div>
 """, unsafe_allow_html=True)
+hero_l, hero_r = st.columns([4, 1])
+with hero_r:
+    st.markdown('<div class="hero-cta">', unsafe_allow_html=True)
+    st.page_link(resolve_page("pages/1_채팅.py"), label="💌 대화 시작하기", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
-st.divider()
+# ── 마을 상점 상태 + 여울이 주민카드 (index.tsx grid 섹션) ────────
+col_shop, col_villager = st.columns([2, 1], gap="medium")
 
-# ── 메뉴 안내 카드 ────────────────────────────
-st.subheader("📌 메뉴 안내")
-st.caption("왼쪽 사이드바에서 메뉴를 선택하세요")
-
-col_a, col_b = st.columns(2)
-
-with col_a:
-    st.markdown("""
-    <a class="card-link" href="/채팅" target="_self">
-    <div class="menu-card">
-        <div class="card-accent teal"></div>
-        <div class="neu-icon">💬</div>
-        <h3>채팅</h3>
-        <p>텍스트를 입력하면 인지왜곡을 분류하고,
-        Azure OpenAI가 사고 재구성을 도와줘요.</p>
-        <p>포함 기능: Content Safety → 분류기 → LLM 라우터 → RAG → OpenAI</p>
+with col_shop:
+    tiles = ""
+    for name, desc, emoji, on, tone in services:
+        state_chip = (
+            f'<span class="ac-chip chip-leaf">🟢 문 열림</span>' if on
+            else f'<span class="ac-chip chip-coral">🔴 닫힘</span>'
+        )
+        tiles += f"""
+        <div style="display:flex; align-items:center; gap:12px; border:1px solid {P['border']};
+                    background:rgba(255,248,231,0.6); border-radius:20px; padding:14px 16px;">
+            <div class="ac-chip {tone}" style="width:44px;height:44px;justify-content:center;
+                 border-radius:16px;font-size:20px;padding:0;">{emoji}</div>
+            <div style="flex:1;min-width:0;">
+                <div class="font-display" style="font-size:.9rem;">{name}</div>
+                <div style="font-size:.75rem;color:{P['muted_fg']};">{desc}</div>
+            </div>
+            {state_chip}
+        </div>"""
+    st.markdown(f"""
+    <div class="ac-card" style="padding:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div>
+          <h2 style="margin:0;font-size:1.25rem;">마을 상점 상태</h2>
+          <p style="margin:0;font-size:.85rem;color:{P['muted_fg']};">오늘 문을 연 서비스들이에요</p>
+        </div>
+        <span class="ac-chip">🛎️ 실시간</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">{tiles}</div>
     </div>
-    </a>
     """, unsafe_allow_html=True)
 
-with col_b:
-    st.markdown("""
-    <a class="card-link" href="/분석대시보드" target="_self">
-    <div class="menu-card">
-        <div class="card-accent lavender"></div>
-        <div class="neu-icon">📊</div>
-        <h3>분석 대시보드</h3>
-        <p>대화 이력을 바탕으로 인지왜곡 유형 분포,
-        변화 추이, 세션별 기록을 시각화해요.</p>
-        <p>포함 기능: 왜곡 유형 차트 · 변화 추이 · 대화 이력 조회</p>
+with col_villager:
+    # 세션 이력 기반 실제 통계 (없으면 0으로 표시)
+    hist = st.session_state.get("distortion_history", [])
+    n_chat = len(hist)
+    n_reframe = len([h for h in hist if h.get("distortion") not in (None, "정상")])
+    n_days = len({h["timestamp"][:10] for h in hist}) if hist else 0
+
+    # 오늘의 활동: 이력 상위 3개 왜곡 유형 (없으면 index.tsx 기본값)
+    if hist:
+        from collections import Counter
+        top3 = Counter(h["distortion"] for h in hist).most_common(3)
+        activities = [(f"{r}st" if r == 1 else f"{r}nd" if r == 2 else f"{r}rd", name, f"{cnt}회")
+                      for r, (name, cnt) in enumerate(top3, start=1)]
+    else:
+        activities = [("1st", "따뜻한 대화", "0회"), ("2nd", "생각 재구성", "0회"), ("3rd", "감정 일기", "0회")]
+
+    tones = ["chip-sunny", "chip-coral", "chip-lilac"]
+    act_rows = "".join(
+        f"""<div style="display:flex;justify-content:space-between;align-items:center;
+                border:1px solid {P['border']};background:rgba(255,248,231,0.6);
+                border-radius:16px;padding:8px 12px;margin:6px 0;">
+              <span style="font-size:.85rem;font-weight:700;">
+                <span class="ac-chip {tones[i % 3]}">{rank}</span>&nbsp; {label}</span>
+              <span style="font-size:.75rem;color:{P['muted_fg']};">{meta}</span>
+            </div>"""
+        for i, (rank, label, meta) in enumerate(activities)
+    )
+    st.markdown(f"""
+    <div class="ac-card" style="overflow:hidden;">
+      <div style="background:rgba(192,248,229,0.4); padding:1.2rem;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:54px;height:54px;border-radius:18px;background:{P['cream']};
+               display:flex;align-items:center;justify-content:center;font-size:26px;
+               box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
+          <div>
+            <div class="font-display" style="font-size:1.1rem;">여울이</div>
+            <div style="font-size:.72rem;color:{P['muted_fg']};">성격: 다정함 · 별자리: 물병자리</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;text-align:center;">
+          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
+            <div class="font-display" style="font-size:1.1rem;">{n_chat}</div>
+            <div style="font-size:.68rem;color:{P['muted_fg']};">대화</div></div>
+          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
+            <div class="font-display" style="font-size:1.1rem;">{n_reframe}</div>
+            <div style="font-size:.68rem;color:{P['muted_fg']};">재구성</div></div>
+          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
+            <div class="font-display" style="font-size:1.1rem;">{n_days}일</div>
+            <div style="font-size:.68rem;color:{P['muted_fg']};">방문</div></div>
+        </div>
+      </div>
+      <div style="padding:1.1rem 1.2rem;">
+        <div class="font-display" style="color:{P['primary']};font-size:.9rem;margin-bottom:8px;">🌟 오늘의 활동</div>
+        {act_rows}
+      </div>
     </div>
-    </a>
     """, unsafe_allow_html=True)
 
-st.divider()
+st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
-# ── 인지왜곡 10개 유형 설명 ───────────────────
-st.subheader("📖 인지왜곡 10개 유형 (KoACD 기준)")
-st.caption("분류기가 탐지하는 유형들이에요")
+# ── 메뉴 카드 3개 (index.tsx Menu cards) ─────────────────────────
+menus = [
+    ("pages/1_채팅.py", "💬", "대화하기", "편지 쓰듯 마음을 적어보세요. 마을 친구가 함께 읽고 재구성해요.", "#c0f8e5", "chip-leaf"),
+    ("pages/2_분석대시보드.py", "📊", "마음 일기", "지난 대화들을 모아 인지왜곡 분포와 변화 흐름을 볼 수 있어요.", "#D9B8E8", "chip-lilac"),
+    ("pages/3_생각도감.py", "📖", "생각도감", "10가지 인지왜곡 유형을 도감처럼 하나씩 알아가요.", "#E39A86", "chip-coral"),
+]
+cols = st.columns(3, gap="medium")
+for col, (page, emoji, title, desc, accent, tone) in zip(cols, menus):
+    with col:
+        st.markdown(f"""
+        <div class="ac-card menu-card-top" style="overflow:hidden;">
+          <div style="height:8px;background:{accent};"></div>
+          <div style="padding:1.4rem 1.4rem .6rem;">
+            <div class="ac-chip {tone}" style="width:46px;height:46px;justify-content:center;
+                 border-radius:16px;font-size:22px;padding:0;margin-bottom:12px;">{emoji}</div>
+            <h3 style="margin:0 0 4px;font-size:1.05rem;">{emoji} {title}</h3>
+            <p style="margin:0;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('<div class="menu-card-cta">', unsafe_allow_html=True)
+        st.page_link(resolve_page(page), label="시작하기 →", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-with st.expander("유형 목록 보기 (클릭)"):
-    types = [
-        ("1", "이분법적 사고", "흑백논리. '완벽하지 않으면 실패야'"),
-        ("2", "과잉일반화", "한 번의 실패로 '항상 그렇다'고 결론"),
-        ("3", "심리적 여과", "부정적인 것만 걸러내 봄"),
-        ("4", "긍정 격하", "좋은 일을 '별거 아니다'고 무시"),
-        ("5", "성급한 결론", "근거 없이 최악을 가정"),
-        ("6", "과장/축소", "단점은 크게, 장점은 작게 봄"),
-        ("7", "감정적 추론", "'이렇게 느끼니까 사실이야'"),
-        ("8", "당위적 진술", "'~해야만 해'로 스스로를 압박"),
-        ("9", "잘못된 명명", "'나는 실패자야' 식의 극단적 낙인"),
-        ("10", "개인화", "내 잘못이 아닌 것도 내 탓으로 돌림"),
-    ]
-    rows_html = "".join([
-        f'<div class="type-row"><b>{num}. {name}</b> — {desc}</div>'
-        for num, name, desc in types
-    ])
-    st.markdown(rows_html, unsafe_allow_html=True)
 
-# ── 하단 안내 ─────────────────────────────────
-st.divider()
-
-if not (safety_connected and search_connected and openai_connected and ml_connected):
-    st.info("💡 **시작하기**: 왼쪽 사이드바에서 **💬 채팅** 메뉴를 선택하세요. 위에 '미연결'로 표시된 서비스는 `.env` 설정 또는 팀원 작업(모델 배포 등)이 필요해요.")
+# ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
+st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+if not all_on:
+    st.info("💡 **시작하기**: 왼쪽 레일에서 **💬 대화하기**를 선택하세요. 위에 '닫힘'으로 표시된 상점은 `.env` 설정 또는 팀원 작업(모델 배포 등)이 필요해요.")
 else:
-    st.success("✅ 모든 Azure 서비스 설정이 완료되어 있어요. **💬 채팅** 메뉴에서 바로 시작해보세요.")
+    st.success("✅ 모든 Azure 상점이 문을 열었어요. **💬 대화하기**에서 바로 시작해보세요.")
