@@ -1,75 +1,26 @@
-# ─────────────────────────────────────────────────────────────────
-# pages/1_채팅.py
-# 파이프라인: Content Safety(crisis_gate) → 분류기 → LLM 라우터 → RAG/STS → OpenAI
-# 위기 감지 시: GPS 자동 위치 감지(카카오) → 실패/거부 시 selectbox 폴백 → get_centers()
-# ─────────────────────────────────────────────────────────────────
-
-import streamlit as st
-import requests
-import json
 import os
+from collections import Counter
 from datetime import datetime
+
+import requests
+import streamlit as st
 from dotenv import load_dotenv
 
 from crisis_gate import check_crisis
 from get_centers import get_centers, get_sigungu_list
 from kakao_geo import coords_to_address
 from streamlit_geolocation import streamlit_geolocation
+from ui_theme import PALETTE as P
+from ui_theme import apply_theme, render_sidebar, render_topbar
 
 load_dotenv()
 
-st.set_page_config(page_title="CBT 채팅", page_icon="💬", layout="wide")
+st.set_page_config(page_title="대화하기 · 마음숲", page_icon="💬", layout="wide")
+apply_theme()
+render_sidebar(active="chat")
+render_topbar()
 
-st.markdown("""
-<style>
-    .stApp { background-color: #EEF0F3; }
-    .user-bubble {
-        background: #4A90D9; color: white; padding: 0.8rem 1.2rem;
-        border-radius: 18px 18px 4px 18px; margin: 0.5rem 0; max-width: 70%;
-        margin-left: auto; font-size: 0.95rem;
-        box-shadow: 4px 4px 10px rgba(163, 177, 198, 0.4);
-    }
-    .bot-bubble {
-        background: #EEF0F3; color: #1E3A5F; padding: 0.8rem 1.2rem;
-        border-radius: 18px 18px 18px 4px; margin: 0.5rem 0; max-width: 70%;
-        font-size: 0.95rem;
-        box-shadow:
-            6px 6px 13px rgba(163, 177, 198, 0.65),
-            -6px -6px 13px rgba(255, 255, 255, 0.95);
-    }
-    .distortion-badge {
-        background: #EDE9FE; color: #4C1D95; padding: 4px 12px;
-        border-radius: 20px; font-size: 0.85rem; font-weight: 600;
-        display: inline-block; margin: 4px 2px;
-    }
-    /* 처리 단계 패널 - 개발자 모드 전용이라 뉴모피즘으로 부드럽게 */
-    .pipeline-step {
-        background: #EEF0F3; padding: 0.5rem 0.9rem;
-        margin: 0.4rem 0; font-size: 0.85rem; color: #374151; border-radius: 10px;
-        box-shadow:
-            3px 3px 6px rgba(163, 177, 198, 0.45),
-            -3px -3px 6px rgba(255, 255, 255, 0.8);
-    }
-    .pipeline-step.done { color: #065F46; }
-    .pipeline-step.error { color: #991B1B; }
-    .pipeline-step.crisis { color: #92400E; }
-    /* ⚠️ 아래 위기 관련 요소는 접근성을 위해 고대비 유지 - 뉴모피즘 적용 안 함 */
-    .crisis-card {
-        background: #FFFBEB; border: 2px solid #F59E0B; border-radius: 12px;
-        padding: 1.2rem; margin: 0.8rem 0;
-    }
-    .center-card {
-        background: white; border-radius: 10px; padding: 0.9rem 1.1rem;
-        margin: 0.5rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-        border: 1px solid #E5E7EB;
-    }
-    .emergency-box {
-        background: #FEF2F2; border-left: 4px solid #EF4444; padding: 0.8rem 1rem;
-        border-radius: 0 8px 8px 0; margin-bottom: 0.8rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
+# ── 환경 변수 (변경 없음) ─────────────────────────────────────────
 AZURE_OPENAI_ENDPOINT   = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY        = os.getenv("AZURE_OPENAI_KEY")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
@@ -92,6 +43,7 @@ SIDO_OPTIONS = [
     "경상남도", "제주특별자치도",
 ]
 
+# ── 세션 상태 (변경 없음 + queued_input 추가) ────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "distortion_history" not in st.session_state:
@@ -99,21 +51,22 @@ if "distortion_history" not in st.session_state:
 if "awaiting_location" not in st.session_state:
     st.session_state.awaiting_location = False
 if "user_location" not in st.session_state:
-    st.session_state.user_location = None  # {"sido":..., "sigungu":...} 한 번 받으면 세션 내 재사용
+    st.session_state.user_location = None  # {"sido":..., "sigungu":...} 세션 내 재사용
+if "queued_input" not in st.session_state:
+    st.session_state.queued_input = None   # 빠른 답장 칩 → 메시지 큐
 
 
 class _NullPlaceholder:
-    """개발자 모드가 꺼져있을 때 pipeline/distortion 패널 호출을 조용히 무시하기 위한 더미 객체"""
-    def markdown(self, *args, **kwargs):
-        pass
-    def caption(self, *args, **kwargs):
-        pass
+    """개발자 모드 OFF 시 pipeline/distortion 패널 호출을 조용히 무시하는 더미"""
+    def markdown(self, *args, **kwargs): pass
+    def caption(self, *args, **kwargs): pass
 
 
 def is_connected(val):
     return val and val != "여기에_나중에_입력"
 
 
+# ── 파이프라인 함수들 (변경 없음) ─────────────────────────────────
 def classify_distortion(text):
     if not is_connected(AZURE_ML_ENDPOINT):
         return {"label": 0, "label_name": "이분법적 사고 (테스트)", "confidence": 0.85, "connected": False}
@@ -203,7 +156,7 @@ def generate_openai_response(user_text, distortion_name, rag_context, route):
 
 
 def render_crisis_result(result: dict):
-    """get_centers() 결과를 화면에 표시"""
+    """get_centers() 결과 표시 (변경 없음 — 고대비 유지)"""
     em = result["emergency_numbers"]
     em_html = "".join([f"<div><b>{num}</b> — {desc}</div>" for num, desc in em.items()])
     st.markdown(f'<div class="emergency-box">🚨 <b>비상연락처 (24시간)</b><br>{em_html}</div>', unsafe_allow_html=True)
@@ -232,32 +185,87 @@ def render_crisis_result(result: dict):
 </div>""", unsafe_allow_html=True)
 
 
-# ── 화면 렌더링 ───────────────────────────────
-st.title("💬 CBT 채팅")
-st.caption("인지왜곡이 감지되면 Azure OpenAI가 사고 재구성을 도와드려요")
-
-# 개발자/심사용 파이프라인 시각화 — 기본은 최종 사용자에게 숨김.
-# 이유: "처리 단계"나 "감지된 왜곡 유형" 뱃지를 사용자가 직접 보면
-# 스스로에게 진단 라벨을 붙이는 셈이 되어 프로젝트의 "진단 기능 의도적 제외" 원칙과 충돌함.
-# 시연/디버깅이 필요할 때만 사이드바에서 켜서 확인하는 용도로 남겨둠.
+# ── 개발자 모드 토글 (사이드바 하단 — 기존 기능 유지) ─────────────
 with st.sidebar:
     st.divider()
-    DEBUG_MODE = st.toggle("🔧 개발자 모드 (파이프라인 보기)", value=False)
+    DEBUG_MODE = st.toggle("🔧 개발자 모드", value=False, help="파이프라인 처리 단계 보기 (심사/디버깅용)")
 
-if DEBUG_MODE:
-    col_chat, col_pipeline = st.columns([2, 1])
-else:
-    col_chat = st.container()
-    col_pipeline = None
+# ── 레이아웃: [채팅 패널 | 사이드 패널] (chat.tsx grid 이식) ──────
+col_chat, col_side = st.columns([2, 1], gap="medium")
 
+# ═══════════ 채팅 패널 ═══════════
 with col_chat:
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            st.markdown(f'<div class="user-bubble">🙋 {msg["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="bot-bubble">🧠 {msg["content"]}</div>', unsafe_allow_html=True)
+    # 헤더 (chat.tsx header)
+    st.markdown(f"""
+<div class="chat-header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div style="width:44px;height:44px;border-radius:16px;background:{P['cream']};
+         display:flex;align-items:center;justify-content:center;font-size:20px;
+         box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🍃</div>
+    <div>
+      <div class="font-display" style="font-size:.95rem;">여울이 · 마음숲 친구</div>
+      <div style="font-size:.72rem;color:{P['muted_fg']};">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+              background:{P['leaf_deep']};vertical-align:middle;"></span>
+        온라인 · 편지 쓰는 중…</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;">
+    <span class="ac-chip chip-leaf">🛡️ 안전</span>
+    <span class="ac-chip chip-sunny">✨ OpenAI</span>
+  </div>
+</div>""", unsafe_allow_html=True)
 
-    # 위기 감지 후 위치 입력 대기 중이면 GPS 버튼 + selectbox 폴백 표시
+    # 메시지 영역 (chat.tsx messages) — 아바타 + 말풍선 + 메타칩 + 시각
+    bubbles = ""
+    if not st.session_state.messages:
+        bubbles = f"""
+<div class="msg-row">
+  <div class="msg-avatar bot">🍃</div>
+  <div class="msg-col">
+    <div class="bubble bot">안녕하세요! 오늘은 어떤 마음이 마을에 놀러왔나요? 편지 쓰듯 편하게 적어주세요 🍃</div>
+  </div>
+</div>"""
+    for msg in st.session_state.messages:
+        time_str = msg.get("time", "")
+        if msg["role"] == "user":
+            bubbles += f"""
+<div class="msg-row me">
+  <div class="msg-col me">
+    <div class="bubble me">{msg["content"]}</div>
+    <div class="msg-time">{time_str}</div>
+  </div>
+  <div class="msg-avatar me">🐰</div>
+</div>"""
+        else:
+            meta = msg.get("meta") or {}
+            meta_html = ""
+            if meta.get("distortion"):
+                sev = f'<span class="ac-chip chip-sunny">신뢰도 {meta["confidence"]:.0%}</span>' if meta.get("confidence") else ""
+                meta_html = f'<div class="msg-meta"><span class="ac-chip chip-coral">🧠 {meta["distortion"]}</span>{sev}</div>'
+            bubbles += f"""
+<div class="msg-row">
+  <div class="msg-avatar bot">🍃</div>
+  <div class="msg-col">
+    <div class="bubble bot">{msg["content"]}</div>
+    {meta_html}
+    <div class="msg-time">{time_str}</div>
+  </div>
+</div>"""
+    st.markdown(f'<div class="chat-body">{bubbles}</div>', unsafe_allow_html=True)
+
+    # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
+    st.markdown('<div class="chat-footer">', unsafe_allow_html=True)
+    quick = ["🌱 오늘 있었던 일", "🌧️ 속상한 마음", "🌟 다시 생각해보기", "🌸 감사한 순간"]
+    qcols = st.columns(len(quick))
+    for qc, q in zip(qcols, quick):
+        with qc:
+            if st.button(q, key=f"quick_{q}", use_container_width=True):
+                st.session_state.queued_input = q[2:].strip() + "에 대해 이야기하고 싶어요"
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── 위기 감지 후 위치 입력 대기 (변경 없음 — GPS + selectbox 폴백) ──
     if st.session_state.awaiting_location:
         st.markdown('<div class="crisis-card">', unsafe_allow_html=True)
         st.markdown("📍 **가까운 기관을 안내해드릴게요.**")
@@ -276,8 +284,6 @@ with col_chat:
             else:
                 st.warning("좌표를 행정구역으로 변환하지 못했어요. 아래에서 직접 선택해주세요.")
 
-        # GPS 감지 성공 시: selectbox 없이 바로 이 위치로 조회 (session_state에 남은
-        # 예전 selectbox 값과 충돌하지 않도록, 자동감지 결과는 별도 버튼으로 분리)
         if sido_gps:
             if st.button(f"📍 {sido_gps} {sigungu_gps} 기준으로 기관 찾기", key="crisis_gps_btn"):
                 st.session_state.user_location = {"sido": sido_gps, "sigungu": sigungu_gps}
@@ -300,94 +306,164 @@ with col_chat:
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 직전에 검색된 위기 결과가 있으면 표시
+    # 직전 위기 결과 표시 (변경 없음)
     if st.session_state.get("last_crisis_result"):
         render_crisis_result(st.session_state.last_crisis_result)
 
-    user_input = st.chat_input("오늘 어떤 생각이 드셨나요? 자유롭게 적어보세요...")
+    # composer — st.chat_input (CSS로 Lovable composer 톤 적용됨)
+    user_input = st.chat_input("여울이에게 편지를 써보세요…")
 
-if DEBUG_MODE:
-    with col_pipeline:
-        st.subheader("🔄 처리 단계")
+    # 대화 초기화 (변경 없음)
+    if st.session_state.messages:
+        if st.button("🗑️ 대화 초기화", type="secondary"):
+            st.session_state.messages = []
+            st.session_state.awaiting_location = False
+            st.session_state.last_crisis_result = None
+            st.session_state.user_location = None
+            st.session_state.pop("crisis_sido", None)
+            st.session_state.pop("crisis_sigungu", None)
+            st.rerun()
+
+# ═══════════ 사이드 패널 (chat.tsx aside) ═══════════
+with col_side:
+    # 개발자 모드: 파이프라인 처리 단계 패널 (기존 기능 유지)
+    if DEBUG_MODE:
+        st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:1rem;">
+        <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
         pipeline_placeholder = st.empty()
         pipeline_placeholder.markdown("""
-<div class="pipeline-step">① 안전 게이트 (대기)</div>
-<div class="pipeline-step">② 인지왜곡 분류기 (대기)</div>
-<div class="pipeline-step">③ LLM 라우터 (대기)</div>
-<div class="pipeline-step">④ RAG / STS (대기)</div>
-<div class="pipeline-step">⑤ Azure OpenAI (대기)</div>
+<div class="pipeline-step">⬜ ① 안전 게이트 (대기)</div>
+<div class="pipeline-step">⬜ ② 인지왜곡 분류기 (대기)</div>
+<div class="pipeline-step">⬜ ③ LLM 라우터 (대기)</div>
+<div class="pipeline-step">⬜ ④ RAG / STS (대기)</div>
+<div class="pipeline-step">⬜ ⑤ Azure OpenAI (대기)</div>
 """, unsafe_allow_html=True)
-        st.divider()
-        st.subheader("🏷️ 감지된 왜곡 유형")
+        st.markdown('<div class="font-display" style="margin:8px 0 4px;">🏷️ 감지된 왜곡 유형</div>', unsafe_allow_html=True)
         distortion_placeholder = st.empty()
         distortion_placeholder.caption("입력 후 결과가 표시됩니다")
-else:
-    # 최종 사용자 화면: 패널 자체를 만들지 않고, 아래 로직에서 호출해도
-    # 아무 일도 일어나지 않는 더미 객체로 대체
-    pipeline_placeholder = _NullPlaceholder()
-    distortion_placeholder = _NullPlaceholder()
+        st.divider()
+    else:
+        pipeline_placeholder = _NullPlaceholder()
+        distortion_placeholder = _NullPlaceholder()
+
+    # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
+    hist = st.session_state.distortion_history
+    bar_tones = ["#E39A86", "#D9B8E8", "#C4DCEA", "#F3DD8F"]
+    if hist:
+        counts = Counter(h["distortion"] for h in hist).most_common(4)
+        total = sum(c for _, c in counts) or 1
+        rows = [(name, round(cnt / len(hist) * 100)) for name, cnt in counts]
+    else:
+        rows = [("과잉일반화", 0), ("잘못된 명명", 0), ("감정적 추론", 0), ("당위적 진술", 0)]
+
+    bars = "".join(
+        f"""<div style="display:flex;justify-content:space-between;font-size:.75rem;">
+              <span style="font-weight:700;">{name}</span>
+              <span style="color:{P['muted_fg']};">{pct}%</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:{pct}%;background:{bar_tones[i % 4]};"></div></div>"""
+        for i, (name, pct) in enumerate(rows)
+    )
+    st.markdown(f"""
+<div class="ac-card" style="padding:1.3rem;margin-bottom:1rem;">
+  <div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>
+  {bars}
+  {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not hist else ''}
+</div>""", unsafe_allow_html=True)
+
+    # 🚨 위기 시 도움받기 (chat.tsx 사이드 카드 — 번호는 백엔드 EMERGENCY와 동일 체계)
+    hotlines = [("자살예방 상담전화", "109"), ("정신건강 위기상담", "1577-0199"),
+                ("응급·소방", "119"), ("경찰", "112")]
+    lines = "".join(
+        f"""<div style="display:flex;justify-content:space-between;align-items:center;
+             padding:10px 16px;border-top:1px solid {P['border']};font-size:.85rem;">
+             <span>{n}</span><a href="tel:{t}" class="font-display"
+             style="color:{P['primary']};text-decoration:none;">{t}</a></div>"""
+        for n, t in hotlines
+    )
+    st.markdown(f"""
+<div class="ac-card" style="overflow:hidden;">
+  <div style="background:rgba(227,154,134,0.22);padding:1rem 1.2rem;">
+    <div class="font-display">🚨 위기 시 도움받기</div>
+    <p style="margin:4px 0 0;font-size:.75rem;color:{P['muted_fg']};">
+      힘든 마음이 크게 느껴진다면 언제든 연결할 수 있어요.</p>
+  </div>
+  {lines}
+</div>""", unsafe_allow_html=True)
 
 
+# ── 파이프라인 실행 (변경 없음 — 시각/메타 저장만 추가) ───────────
 def render_pipeline(steps):
     labels = {"safety": "① 안전 게이트", "classify": "② 인지왜곡 분류기",
               "router": "③ LLM 라우터", "rag": "④ RAG / STS", "openai": "⑤ Azure OpenAI"}
     icons  = {"done": "✅", "processing": "⏳", "pending": "⬜", "error": "❌", "crisis": "🚨"}
     html = ""
     for key, (icon_key, status) in steps.items():
-        css = "pipeline-step" + (" done" if status=="done" else " error" if status=="error" else " crisis" if status=="crisis" else "")
+        css = "pipeline-step" + (" done" if status == "done" else " error" if status == "error" else " crisis" if status == "crisis" else "")
         html += f'<div class="{css}">{icons.get(icon_key,"⬜")} {labels[key]}</div>'
     pipeline_placeholder.markdown(html, unsafe_allow_html=True)
 
 
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.session_state.last_crisis_result = None  # 새 메시지 들어오면 이전 위기카드 비움
-    steps = {k: ("⏳","processing") for k in ["safety","classify","router","rag","openai"]}
+# 빠른 답장 칩으로 큐된 입력이 있으면 그것을 사용
+if st.session_state.queued_input and not user_input:
+    user_input = st.session_state.queued_input
+    st.session_state.queued_input = None
 
-    # ① Safety — crisis_gate.check_crisis() 사용
+if user_input:
+    now_str = datetime.now().strftime("%H:%M")
+    st.session_state.messages.append({"role": "user", "content": user_input, "time": now_str})
+    st.session_state.last_crisis_result = None  # 새 메시지 → 이전 위기카드 비움
+    steps = {k: ("⏳", "processing") for k in ["safety", "classify", "router", "rag", "openai"]}
+
+    # ① Safety — crisis_gate.check_crisis() (변경 없음)
     render_pipeline(steps)
     crisis = check_crisis(user_input)
     if crisis["is_crisis"]:
-        steps["safety"] = ("🚨","crisis")
+        steps["safety"] = ("🚨", "crisis")
         render_pipeline(steps)
         crisis_msg = "🚨 **위기 상황이 감지되었습니다**\n\n지금 많이 힘드신 것 같아요. 아래에서 가까운 기관을 확인해보세요."
-        st.session_state.messages.append({"role": "assistant", "content": crisis_msg})
+        st.session_state.messages.append({"role": "assistant", "content": crisis_msg, "time": now_str})
 
         if st.session_state.user_location:
-            # 이미 위치를 받은 적 있으면 selectbox/GPS 생략하고 바로 조회
             loc = st.session_state.user_location
             st.session_state.last_crisis_result = get_centers(loc["sido"], loc["sigungu"], is_crisis=True)
         else:
             st.session_state.awaiting_location = True
         st.rerun()
-    steps["safety"] = ("✅","done")
+    steps["safety"] = ("✅", "done")
 
-    # ② 분류기
-    steps["classify"] = ("⏳","processing")
+    # ② 분류기 (변경 없음)
+    steps["classify"] = ("⏳", "processing")
     render_pipeline(steps)
     clf = classify_distortion(user_input)
     distortion_name = clf["label_name"]
     confidence = clf["confidence"]
-    steps["classify"] = ("✅","done")
-    distortion_placeholder.markdown(f'<span class="distortion-badge">{distortion_name}</span><br><small>신뢰도: {confidence:.0%}</small>', unsafe_allow_html=True)
+    steps["classify"] = ("✅", "done")
+    distortion_placeholder.markdown(
+        f'<span class="distortion-badge">{distortion_name}</span><br><small>신뢰도: {confidence:.0%}</small>',
+        unsafe_allow_html=True)
 
-    # ③ 라우터
-    steps["router"] = ("⏳","processing"); render_pipeline(steps)
+    # ③ 라우터 (변경 없음)
+    steps["router"] = ("⏳", "processing"); render_pipeline(steps)
     route = llm_router(user_input)
-    steps["router"] = ("✅","done")
+    steps["router"] = ("✅", "done")
 
-    # ④ RAG
-    steps["rag"] = ("⏳","processing"); render_pipeline(steps)
-    rag_context = search_rag(user_input, distortion_name) if route=="RAG" else "짧은 컨텍스트 → STS 직접 응답"
-    steps["rag"] = ("✅","done")
+    # ④ RAG (변경 없음)
+    steps["rag"] = ("⏳", "processing"); render_pipeline(steps)
+    rag_context = search_rag(user_input, distortion_name) if route == "RAG" else "짧은 컨텍스트 → STS 직접 응답"
+    steps["rag"] = ("✅", "done")
 
-    # ⑤ OpenAI
-    steps["openai"] = ("⏳","processing"); render_pipeline(steps)
-    with st.spinner("응답 생성 중..."):
+    # ⑤ OpenAI (변경 없음)
+    steps["openai"] = ("⏳", "processing"); render_pipeline(steps)
+    with st.spinner("여울이가 편지를 쓰는 중…"):
         ai_response = generate_openai_response(user_input, distortion_name, rag_context, route)
-    steps["openai"] = ("✅","done"); render_pipeline(steps)
+    steps["openai"] = ("✅", "done"); render_pipeline(steps)
 
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+    # 응답 저장 — Lovable 말풍선 메타칩용으로 meta 추가
+    # (개발자 모드 OFF일 때 메타칩 노출은 '진단 라벨 셀프 부착' 우려가 있어
+    #  DEBUG_MODE가 켜진 세션에서만 칩을 저장/표시)
+    meta = {"distortion": distortion_name, "confidence": confidence} if DEBUG_MODE else None
+    st.session_state.messages.append({"role": "assistant", "content": ai_response,
+                                      "time": datetime.now().strftime("%H:%M"), "meta": meta})
     st.session_state.distortion_history.append({
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "user_text": user_input,
@@ -396,14 +472,3 @@ if user_input:
         "route": route,
     })
     st.rerun()
-
-if st.session_state.messages:
-    if st.button("🗑️ 대화 초기화", type="secondary"):
-        st.session_state.messages = []
-        st.session_state.awaiting_location = False
-        st.session_state.last_crisis_result = None
-        st.session_state.user_location = None
-        # selectbox에 남은 이전 선택값도 같이 초기화 (다음 위기 감지 시 깨끗한 상태로 시작)
-        st.session_state.pop("crisis_sido", None)
-        st.session_state.pop("crisis_sigungu", None)
-        st.rerun()
