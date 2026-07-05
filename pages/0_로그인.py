@@ -1,6 +1,6 @@
 import streamlit as st
 
-from api_client import create_profile, get_profile
+from api_client import create_profile, get_profile, virtual_user_id
 from ui_theme import PALETTE as P
 from ui_theme import apply_theme, render_sidebar, render_topbar, resolve_page
 
@@ -23,8 +23,10 @@ with st.container(border=True):
             st.stop()
 
         st.session_state.user_email = email   # 표시용
+        st.session_state.user_id = virtual_user_id(email)      # 가상 ID — 이후 모든 호출의 x-user-id
+        st.query_params["uid"] = st.session_state.user_id      # 새로고침해도 로그인 유지(3번 항목)
         st.session_state.is_logged_in = True
-
+        
         profile = get_profile() or create_profile()
         st.session_state.user_profile = profile
 
