@@ -75,7 +75,17 @@ def img_b64(filename: str) -> str:
 
 
 # ── 전역 CSS (styles.css + app-layout.tsx 이식) ────────────────────
+def restore_session():
+    """새로고침 등으로 session_state가 리셋돼도 URL의 ?uid= 로 로그인 상태를 복원한다.
+    브라우저 탭을 완전히 새로 열면(주소창에 uid 없이 접속) 복원 안 됨 — 그땐 재로그인이 맞는 동작."""
+    if not st.session_state.get("user_id"):
+        qp_uid = st.query_params.get("uid")
+        if qp_uid:
+            st.session_state.user_id = qp_uid
+            st.session_state.is_logged_in = True
+
 def apply_theme():
+    restore_session()
     p = PALETTE
     st.markdown(f"""
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -354,30 +364,24 @@ NAV = [
     ("analytics", "pages/2_분석대시보드.py",       "📊", "마음 일기"),
     ("types",     "pages/3_생각도감.py",          "📖", "생각도감"),
     ("survey",    "pages/4_설문.py",             "📝", "설문"),
+    ("history",   "pages/5_이전대화기록.py",       "🗂️", "이전 대화"),
 ]
 
 
 def render_sidebar(active: str = "home"):
-    mascot = img_b64("leaf-mascot.png")
-    logo_html = (
-        f'<div class="rail-logo"><img src="{mascot}" alt="마음숲 마스코트"/></div>'
-        if mascot else '<div class="rail-logo" style="font-size:30px;padding:10px 12px;">🍃</div>'
-    )
+    is_logged_in = bool(st.session_state.get("is_logged_in"))
     with st.sidebar:
-        st.markdown(
-            f'<div style="display:flex;flex-direction:column;align-items:center;width:100%;">{logo_html}</div>',
-            unsafe_allow_html=True,
-        )
-        # 캐릭터 바로 아래 로그인 진입 버튼 (요청: 로고 누르면 로그인으로)
-        st.page_link(resolve_page("pages/0_로그인.py"), label="로그인", icon="🔐", use_container_width=True)
-        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
         for key, page, icon, label in NAV:
             st.page_link(resolve_page(page), label=label, icon=icon, use_container_width=True)
-        st.markdown(
-            '<div style="display:flex;justify-content:center;width:100%;">'
-            '<div class="rail-avatar">🐰</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div style="flex:1;"></div>', unsafe_allow_html=True)  # 사이드바 이미 flex라 이게 토끼를 하단 고정
+        if is_logged_in:
+            if st.button("🐰 로그아웃", key="rabbit_logout_btn", use_container_width=True):
+                for k in ("user_id", "user_email", "is_logged_in", "user_profile"):
+                    st.session_state.pop(k, None)
+                st.query_params.clear()
+                st.switch_page(resolve_page("pages/0_로그인.py"))
+        else:
+            st.page_link(resolve_page("pages/0_로그인.py"), label="로그인", icon="🐰", use_container_width=True)
 
 
 # ── 상단 바 (app-layout.tsx header 이식) ─────────────────────────
@@ -404,3 +408,19 @@ def render_topbar(show_new_chat: bool = True):
             )
     st.markdown(f'<div style="border-bottom:1px solid {PALETTE["border"]};margin:8px 0 1.4rem;"></div>',
                 unsafe_allow_html=True)
+    
+    
+def friendly_session_label(session_id: str, created_at: str | None = None) -> str:
+    """긴 UUID 대신 생성 시각 기준 라벨 + 축약 ID로 표시."""
+    short_id = (session_id or "")[:8]
+    if created_at:
+        try:
+            dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            return f"{dt.strftime('%m/%d %H:%M')} 대화 (id: {short_id}…)"
+        except ValueError:
+            pass
+    return f"대화 (id: {short_id}…)"
+
+def safe_bubble_text(text: str) -> str:
+    """메시지 안 실제 줄바꿈이 raw HTML 블록 파싱을 깨는 것 방지 — <br>로 치환."""
+    return (text or "").replace("\r\n", "\n").replace("\n\n", "<br><br>").replace("\n", "<br>")
