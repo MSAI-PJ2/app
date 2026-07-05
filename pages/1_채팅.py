@@ -1,17 +1,16 @@
-import os
+import uuid
 from collections import Counter
 from datetime import datetime
 
-import requests
 import streamlit as st
 from dotenv import load_dotenv
 
-from crisis_gate import check_crisis
+from api_client import respond_stream, respond_stream_audio, respond_stream_image
 from get_centers import get_centers, get_sigungu_list
 from kakao_geo import coords_to_address
 from streamlit_geolocation import streamlit_geolocation
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar
+from ui_theme import apply_theme, render_sidebar, render_topbar, safe_bubble_text
 
 load_dotenv()
 
@@ -20,22 +19,6 @@ apply_theme()
 render_sidebar(active="chat")
 render_topbar()
 
-# ── 환경 변수 (변경 없음) ─────────────────────────────────────────
-AZURE_OPENAI_ENDPOINT   = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_KEY        = os.getenv("AZURE_OPENAI_KEY")
-AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-AZURE_SEARCH_ENDPOINT   = os.getenv("AZURE_SEARCH_ENDPOINT")
-AZURE_SEARCH_KEY        = os.getenv("AZURE_SEARCH_KEY")
-AZURE_SEARCH_INDEX      = os.getenv("AZURE_SEARCH_INDEX")
-AZURE_ML_ENDPOINT       = os.getenv("AZURE_ML_ENDPOINT")
-AZURE_ML_KEY            = os.getenv("AZURE_ML_KEY")
-
-DISTORTION_LABELS = {
-    0: "이분법적 사고", 1: "과잉일반화", 2: "심리적 여과",
-    3: "긍정 격하",    4: "성급한 결론", 5: "과장/축소",
-    6: "감정적 추론",  7: "당위적 진술", 8: "잘못된 명명", 9: "개인화",
-}
-
 SIDO_OPTIONS = [
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
     "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도",
@@ -43,7 +26,9 @@ SIDO_OPTIONS = [
     "경상남도", "제주특별자치도",
 ]
 
-# ── 세션 상태 (변경 없음 + queued_input 추가) ────────────────────
+# ── 세션 상태 ─────────────────────────────────────────────────────
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())  # 게이트웨이 대화 세션 ID (Cosmos session_id 로 저장됨)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "distortion_history" not in st.session_state:
@@ -54,99 +39,8 @@ if "user_location" not in st.session_state:
     st.session_state.user_location = None  # {"sido":..., "sigungu":...} 세션 내 재사용
 if "queued_input" not in st.session_state:
     st.session_state.queued_input = None   # 빠른 답장 칩 → 메시지 큐
-
-
-def is_connected(val):
-    return val and val != "여기에_나중에_입력"
-
-
-# ── 파이프라인 함수들 (변경 없음) ─────────────────────────────────
-def classify_distortion(text):
-    if not is_connected(AZURE_ML_ENDPOINT):
-        return {"label": 0, "label_name": "이분법적 사고 (테스트)", "confidence": 0.85, "connected": False}
-    try:
-        headers = {"Authorization": f"Bearer {AZURE_ML_KEY}", "Content-Type": "application/json"}
-        r = requests.post(AZURE_ML_ENDPOINT, headers=headers, json={"text": text}, timeout=15).json()
-        label = r.get("label", 0)
-        return {"label": label, "label_name": DISTORTION_LABELS.get(label, "알 수 없음"),
-                "confidence": r.get("confidence", 0.0), "connected": True}
-    except Exception as e:
-        return {"label": -1, "label_name": "분류 오류", "confidence": 0.0, "connected": False, "error": str(e)}
-
-
-def llm_router(text):
-    return "RAG" if len(text) > 50 else "STS"
-
-
-def search_rag(query, distortion_label):
-    if not is_connected(AZURE_SEARCH_ENDPOINT):
-        dummy = {
-            "이분법적 사고": "연속선 기법: 0~100 척도로 상황을 평가해보세요.",
-            "과잉일반화": "증거 검토 기법: '항상', '절대로' 같은 단어를 쓸 때 실제 증거를 검토해보세요.",
-        }
-        return f"[테스트 모드]\n{dummy.get(distortion_label, '인지재구성 기법: 다른 관점에서 증거를 기반으로 생각을 재평가해보세요.')}"
-    try:
-        from openai import AzureOpenAI
-        ai_client = AzureOpenAI(
-            api_key=os.getenv("AZURE_OPENAI_KEY"),
-            api_version="2024-02-01",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
-        )
-        vec = ai_client.embeddings.create(
-            model=os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-small"),
-            input=f"{distortion_label} {query}"
-        ).data[0].embedding
-
-        url = f"{AZURE_SEARCH_ENDPOINT}/indexes/{AZURE_SEARCH_INDEX}/docs/search?api-version=2024-05-01-preview"
-        headers = {"api-key": AZURE_SEARCH_KEY, "Content-Type": "application/json"}
-        body = {
-            "search": f"{distortion_label} {query}",
-            "queryType": "semantic",
-            "semanticConfiguration": "cbt-semantic-config",
-            "top": 3,
-            "vectorQueries": [{
-                "kind": "vector",
-                "vector": vec,
-                "fields": "content_vector",
-                "k": 5
-            }]
-        }
-        r = requests.post(url, headers=headers, json=body, timeout=10).json()
-        docs = r.get("value", [])
-        return "\n\n".join([d.get("content", "") for d in docs]) if docs else "관련 기법을 찾지 못했어요."
-    except Exception as e:
-        return f"RAG 오류: {e}"
-
-
-def generate_openai_response(user_text, distortion_name, rag_context, route):
-    if not is_connected(AZURE_OPENAI_ENDPOINT):
-        return (
-            f"**[테스트 모드 응답]**\n\n"
-            f"입력하신 내용에서 **{distortion_name}** 패턴이 감지되었어요.\n\n"
-            f"Azure OpenAI가 연결되면 실제 CBT 사고 재구성 안내가 여기에 표시됩니다."
-        )
-    try:
-        url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2025-01-01-preview"
-        headers = {"api-key": AZURE_OPENAI_KEY, "Content-Type": "application/json"}
-        system_prompt = """당신은 인지행동치료(CBT) 전문 상담 AI입니다.
-사용자의 말에서 인지왜곡을 발견했을 때, 다음 3단계로 응답하세요:
-1. 발견된 인지왜곡 유형을 따뜻하게 설명하기
-2. CBT 기법을 활용한 사고 재구성 안내
-3. 새로운 관점으로 재발화 유도
-항상 공감적이고 비판단적인 태도를 유지하세요. 한국어로 응답하세요."""
-        user_prompt = f"""사용자 발화: "{user_text}"
-감지된 인지왜곡: {distortion_name}
-관련 CBT 기법 참고자료: {rag_context}
-라우팅 방식: {route}
-위 정보를 바탕으로 CBT 상담 응답을 생성해주세요."""
-        body = {
-            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-            "temperature": 0.7, "max_tokens": 600
-        }
-        r = requests.post(url, headers=headers, json=body, timeout=30).json()
-        return r["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"OpenAI 오류: {e}"
+if "input_widget_seq" not in st.session_state:
+    st.session_state.input_widget_seq = 0
 
 
 def render_crisis_result(result: dict):
@@ -207,42 +101,49 @@ with col_chat:
 </div>""", unsafe_allow_html=True)
 
     # 메시지 영역 (chat.tsx messages) — 아바타 + 말풍선 + 메타칩 + 시각
-    bubbles = ""
+    # ⚠️ 예전엔 메시지 전체를 문자열 하나로 합쳐서 한 번에 st.markdown() 했는데,
+    # 그러면 답변 하나의 구조 때문에 raw-HTML 블록 인식이 중간에 깨질 경우 그
+    # 뒤에 오는 모든 메시지가 영향을 받는다(<div class="msg-time"> 코드 노출 버그).
+    # 메시지마다 별도의 st.markdown() 호출로 렌더링해서 서로 완전히 격리시킨다.
+    st.markdown('<div class="chat-body">', unsafe_allow_html=True)
     if not st.session_state.messages:
-        bubbles = f"""
+        st.markdown("""
 <div class="msg-row">
   <div class="msg-avatar bot">🍃</div>
   <div class="msg-col">
     <div class="bubble bot">안녕하세요! 오늘은 어떤 마음이 마을에 놀러왔나요? 편지 쓰듯 편하게 적어주세요 🍃</div>
   </div>
-</div>"""
+</div>""", unsafe_allow_html=True)
     for msg in st.session_state.messages:
         time_str = msg.get("time", "")
         if msg["role"] == "user":
-            bubbles += f"""
+            st.markdown(f"""
 <div class="msg-row me">
   <div class="msg-col me">
-    <div class="bubble me">{msg["content"]}</div>
-    <div class="msg-time">{time_str}</div>
+    <div class="bubble me">{safe_bubble_text(msg["content"])}</div>
   </div>
   <div class="msg-avatar me">🐰</div>
-</div>"""
+</div>""", unsafe_allow_html=True)
+            # ⚠️ 시간 표시는 raw HTML(<div class="msg-time">)이 아니라 Streamlit 네이티브
+            # st.caption()으로 렌더링한다 — HTML 파싱 자체를 안 거치므로 태그가 텍스트로
+            # 노출되는 버그가 구조적으로 발생할 수 없다. (디자인 손실: 우측 정렬은 못 함)
+            st.caption(time_str)
         else:
             meta = msg.get("meta") or {}
             meta_html = ""
             if meta.get("distortion"):
                 sev = f'<span class="ac-chip chip-sunny">신뢰도 {meta["confidence"]:.0%}</span>' if meta.get("confidence") else ""
                 meta_html = f'<div class="msg-meta"><span class="ac-chip chip-coral">🧠 {meta["distortion"]}</span>{sev}</div>'
-            bubbles += f"""
+            st.markdown(f"""
 <div class="msg-row">
   <div class="msg-avatar bot">🍃</div>
   <div class="msg-col">
-    <div class="bubble bot">{msg["content"]}</div>
+    <div class="bubble bot">{safe_bubble_text(msg["content"])}</div>
     {meta_html}
-    <div class="msg-time">{time_str}</div>
   </div>
-</div>"""
-    st.markdown(f'<div class="chat-body">{bubbles}</div>', unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
+            st.caption(time_str)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
     st.markdown('<div class="chat-footer">', unsafe_allow_html=True)
@@ -307,13 +208,29 @@ with col_chat:
     if st.session_state.get("last_crisis_result"):
         render_crisis_result(st.session_state.last_crisis_result)
 
-    # composer — st.chat_input (CSS로 Lovable composer 톤 적용됨)
-    user_input = st.chat_input("여울이에게 편지를 써보세요…")
+    # composer — 입력 방식 선택 (텍스트/음성/카톡 캡쳐)
+    input_mode = st.radio("입력 방식", ["✍️ 텍스트", "🎙️ 음성", "🖼️ 카톡 캡쳐"],
+                          horizontal=True, label_visibility="collapsed", key="input_mode")
 
+    user_input = None
+    audio_value = None
+    image_value = None
+    if input_mode == "✍️ 텍스트":
+        user_input = st.chat_input("여울이에게 편지를 써보세요…")
+    elif input_mode == "🎙️ 음성":
+        audio_value = st.audio_input("마이크로 말해보세요", key=f"audio_input_{st.session_state.input_widget_seq}")
+    elif input_mode == "🖼️ 카톡 캡쳐":
+        image_value = st.file_uploader("카톡 대화 캡쳐를 올려주세요", type=["png", "jpg", "jpeg"],
+                                   key=f"image_uploader_{st.session_state.input_widget_seq}")
+        kakao_sender = st.text_input("상대방 이름 (선택 — 있으면 화자 구분이 더 정확해요)", key="kakao_sender")  
+    
+    
+    
     # 대화 초기화 (변경 없음)
     if st.session_state.messages:
         if st.button("🗑️ 대화 초기화", type="secondary"):
             st.session_state.messages = []
+            st.session_state.session_id = str(uuid.uuid4())  # 새 대화 = 새 Cosmos 세션
             st.session_state.awaiting_location = False
             st.session_state.last_crisis_result = None
             st.session_state.user_location = None
@@ -405,61 +322,274 @@ if user_input:
     now_str = datetime.now().strftime("%H:%M")
     st.session_state.messages.append({"role": "user", "content": user_input, "time": now_str})
     st.session_state.last_crisis_result = None  # 새 메시지 → 이전 위기카드 비움
-    steps = {k: ("⏳", "processing") for k in ["safety", "classify", "router", "rag", "openai"]}
-
-    # ① Safety — crisis_gate.check_crisis() (변경 없음)
+    steps = {k: ("⬜", "pending") for k in ["safety", "classify", "router", "rag", "openai"]}
     render_pipeline(steps)
-    crisis = check_crisis(user_input)
-    if crisis["is_crisis"]:
-        steps["safety"] = ("🚨", "crisis")
-        render_pipeline(steps)
-        crisis_msg = "🚨 **위기 상황이 감지되었습니다**\n\n지금 많이 힘드신 것 같아요. 아래에서 가까운 기관을 확인해보세요."
-        st.session_state.messages.append({"role": "assistant", "content": crisis_msg, "time": now_str})
 
+    assistant_parts: list[str] = []
+    primary = None
+    confidence = 0.0
+    is_crisis = False
+    crisis_message = None
+    error_message = None
+    route = "STS"  # chunks 이벤트가 안 오면(예: crisis 분기) 기본값 유지
+
+    # 게이트웨이 POST /v1/respond 를 호출해 SSE 이벤트를 순서대로 소비한다.
+    # 2026-07-04 게이트웨이 업데이트로 단계 완료를 알려주는 progress 이벤트가 추가됐다.
+    # meta/chunks 도착 시점으로 "단계가 끝났다"를 추측하던 이전 방식보다, 백엔드가 직접
+    # 보내는 progress(stage) 신호를 쓰는 게 더 정확하다 — meta/chunks 는 이제 데이터만 담당.
+    # 순서: progress(input) -> progress(analyze) -> meta -> chunks -> progress(route)
+    #       -> token... -> progress(generate) -> [progress(speak)] -> done
+    try:
+        with st.spinner("여울이가 편지를 쓰는 중…"):
+            for event in respond_stream(st.session_state.session_id, user_input):
+                etype = event.get("type")
+
+                if etype == "progress":
+                    stage = event.get("stage")
+                    if stage == "analyze":
+                        # 안전점검 + 분류 + RAG 후보 검색이 동시에(gather) 끝난 시점
+                        steps["safety"] = ("✅", "done")
+                        steps["classify"] = ("✅", "done")
+                        render_pipeline(steps)
+                    elif stage == "route":
+                        # 라우팅 결정 + 프롬프트 구성까지 끝난 시점
+                        steps["router"] = ("✅", "done")
+                        steps["rag"] = ("✅", "done")
+                        steps["openai"] = ("⏳", "processing")
+                        render_pipeline(steps)
+                    elif stage == "generate":
+                        steps["openai"] = ("✅", "done")
+                        render_pipeline(steps)
+
+                elif etype == "meta":
+                    # 이제 단계 표시는 progress 가 담당 — meta 는 라벨/신뢰도 데이터만 취한다
+                    primary = event.get("primary")
+                    labels = event.get("labels") or []
+                    confidence = next((l["score"] for l in labels if l["label"] == primary), 0.0)
+                    if primary:
+                        distortion_placeholder.markdown(
+                            f'<span class="distortion-badge">{primary}</span><br><small>신뢰도: {confidence:.0%}</small>',
+                            unsafe_allow_html=True)
+
+                elif etype == "crisis":
+                    is_crisis = True
+                    crisis_message = event.get("message") or "🚨 위기 상황이 감지되었습니다."
+                    steps["safety"] = ("🚨", "crisis")
+                    render_pipeline(steps)
+
+                elif etype == "chunks":
+                    # route 판정(RAG 사용 여부)만 취한다 — ✅ 표시는 progress(route) 가 이미 처리
+                    route = "RAG" if event.get("chunks") else "STS"
+
+                elif etype == "token":
+                    assistant_parts.append(event.get("text", ""))
+
+                elif etype == "input_required":
+                    error_message = event.get("message") or "입력을 다시 확인해주세요."
+
+                elif etype == "done":
+                    break
+    except Exception as e:
+        error_message = f"게이트웨이 연결 오류: {e}"
+
+    if error_message:
+        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ {error_message}", "time": now_str})
+        st.rerun()
+
+    if is_crisis:
+        steps.update(router=("⬜", "pending"), rag=("⬜", "pending"), openai=("⬜", "pending"))
+        render_pipeline(steps)
+        st.session_state.messages.append({"role": "assistant", "content": crisis_message, "time": now_str})
+
+        # 백엔드 crisis 이벤트(전국 공통 창구)와 별개로, 로컬 kfsp_centers 지역 기관 조회는 그대로 유지
         if st.session_state.user_location:
             loc = st.session_state.user_location
             st.session_state.last_crisis_result = get_centers(loc["sido"], loc["sigungu"], is_crisis=True)
         else:
             st.session_state.awaiting_location = True
         st.rerun()
-    steps["safety"] = ("✅", "done")
 
-    # ② 분류기 (변경 없음)
-    steps["classify"] = ("⏳", "processing")
+    steps["openai"] = ("✅", "done")
     render_pipeline(steps)
-    clf = classify_distortion(user_input)
-    distortion_name = clf["label_name"]
-    confidence = clf["confidence"]
-    steps["classify"] = ("✅", "done")
-    distortion_placeholder.markdown(
-        f'<span class="distortion-badge">{distortion_name}</span><br><small>신뢰도: {confidence:.0%}</small>',
-        unsafe_allow_html=True)
 
-    # ③ 라우터 (변경 없음)
-    steps["router"] = ("⏳", "processing"); render_pipeline(steps)
-    route = llm_router(user_input)
-    steps["router"] = ("✅", "done")
-
-    # ④ RAG (변경 없음)
-    steps["rag"] = ("⏳", "processing"); render_pipeline(steps)
-    rag_context = search_rag(user_input, distortion_name) if route == "RAG" else "짧은 컨텍스트 → STS 직접 응답"
-    steps["rag"] = ("✅", "done")
-
-    # ⑤ OpenAI (변경 없음)
-    steps["openai"] = ("⏳", "processing"); render_pipeline(steps)
-    with st.spinner("여울이가 편지를 쓰는 중…"):
-        ai_response = generate_openai_response(user_input, distortion_name, rag_context, route)
-    steps["openai"] = ("✅", "done"); render_pipeline(steps)
+    # route 는 위 루프의 chunks 이벤트에서 이미 정확히 설정됨(steps["rag"]는 이제
+    # progress(route) 이벤트로 항상 done 이 되므로 여기서 재계산하면 안 됨 — 2026-07-04 수정)
+    ai_response = "".join(assistant_parts).strip() or "응답을 생성하지 못했어요. 다시 시도해주세요."
 
     # 응답 저장 — Lovable 말풍선 메타칩용으로 meta 추가 (처리단계 패널과 함께 항상 노출)
-    meta = {"distortion": distortion_name, "confidence": confidence}
+    meta = {"distortion": primary, "confidence": confidence}
     st.session_state.messages.append({"role": "assistant", "content": ai_response,
                                       "time": datetime.now().strftime("%H:%M"), "meta": meta})
-    st.session_state.distortion_history.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "user_text": user_input,
-        "distortion": distortion_name,
-        "confidence": confidence,
-        "route": route,
-    })
+    if primary:
+        st.session_state.distortion_history.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "user_text": user_input,
+            "distortion": primary,
+            "confidence": confidence,
+            "route": route,
+        })
+    st.rerun()
+    
+elif input_mode == "🎙️ 음성" and audio_value is not None:
+    st.session_state.input_widget_seq += 1  # 위젯 key 갱신 → 다음 rerun에서 값 초기화(무한루프 방지)
+    now_str = datetime.now().strftime("%H:%M")
+    audio_bytes = audio_value.getvalue()
+    st.session_state.messages.append({"role": "user", "content": "🎙️ (음성 메시지)", "time": now_str})
+    st.session_state.last_crisis_result = None
+    steps = {k: ("⬜", "pending") for k in ["safety", "classify", "router", "rag", "openai"]}
+    render_pipeline(steps)
+
+    transcript = None
+    assistant_parts, primary, confidence = [], None, 0.0
+    is_crisis, crisis_message, error_message = False, None, None
+    route = "STS"
+    try:
+        with st.spinner("음성을 듣고 있어요…"):
+            for event in respond_stream_audio(st.session_state.session_id, audio_bytes, "audio/wav"):
+                etype = event.get("type")
+                if etype == "stt":
+                    if event.get("status") == "completed":
+                        transcript = event.get("transcript")
+                        if transcript:
+                            st.session_state.messages[-1]["content"] = transcript
+                    else:
+                        error_message = event.get("error") or event.get("reason") or "음성을 인식하지 못했어요."
+                elif etype == "input_required":
+                    error_message = error_message or (event.get("message") or "다시 말씀해주세요.")
+                elif etype == "progress":
+                    stage = event.get("stage")
+                    if stage == "analyze":
+                        steps["safety"] = ("✅", "done"); steps["classify"] = ("✅", "done")
+                        render_pipeline(steps)
+                    elif stage == "route":
+                        steps["router"] = ("✅", "done"); steps["rag"] = ("✅", "done")
+                        steps["openai"] = ("⏳", "processing"); render_pipeline(steps)
+                    elif stage == "generate":
+                        steps["openai"] = ("✅", "done"); render_pipeline(steps)
+                elif etype == "meta":
+                    primary = event.get("primary")
+                    labels = event.get("labels") or []
+                    confidence = next((l["score"] for l in labels if l["label"] == primary), 0.0)
+                elif etype == "crisis":
+                    is_crisis = True
+                    crisis_message = event.get("message") or "🚨 위기 상황이 감지되었습니다."
+                    steps["safety"] = ("🚨", "crisis"); render_pipeline(steps)
+                elif etype == "chunks":
+                    route = "RAG" if event.get("chunks") else "STS"
+                elif etype == "token":
+                    assistant_parts.append(event.get("text", ""))
+                elif etype == "done":
+                    break
+    except Exception as e:
+        error_message = f"게이트웨이 연결 오류: {e}"
+
+    if error_message and not transcript:
+        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ {error_message}", "time": now_str})
+        st.rerun()
+
+    if is_crisis:
+        st.session_state.messages.append({"role": "assistant", "content": crisis_message, "time": now_str})
+        if st.session_state.user_location:
+            loc = st.session_state.user_location
+            st.session_state.last_crisis_result = get_centers(loc["sido"], loc["sigungu"], is_crisis=True)
+        else:
+            st.session_state.awaiting_location = True
+        st.rerun()
+
+    steps["openai"] = ("✅", "done"); render_pipeline(steps)
+    ai_response = "".join(assistant_parts).strip() or "응답을 생성하지 못했어요."
+    st.session_state.messages.append({"role": "assistant", "content": ai_response,
+                                      "time": datetime.now().strftime("%H:%M"),
+                                      "meta": {"distortion": primary, "confidence": confidence}})
+    if primary:
+        st.session_state.distortion_history.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "user_text": transcript or "(음성 메시지)", "distortion": primary,
+            "confidence": confidence, "route": route,
+        })
+    st.rerun()
+
+elif input_mode == "🖼️ 카톡 캡쳐" and image_value is not None:
+    st.session_state.input_widget_seq += 1  # 위젯 key 갱신 → 다음 rerun에서 값 초기화(무한루프 방지)
+    now_str = datetime.now().strftime("%H:%M")
+    image_bytes = image_value.getvalue()
+    mime = "image/jpeg" if image_value.type in ("image/jpeg", "image/jpg") else "image/png"
+    sender_names = [kakao_sender.strip()] if st.session_state.get("kakao_sender", "").strip() else []
+
+    st.session_state.messages.append({"role": "user", "content": "🖼️ (카톡 캡쳐 업로드)", "time": now_str})
+    st.session_state.last_crisis_result = None
+    steps = {k: ("⬜", "pending") for k in ["safety", "classify", "router", "rag", "openai"]}
+    render_pipeline(steps)
+
+    extracted_text = None
+    assistant_parts, primary, confidence = [], None, 0.0
+    is_crisis, crisis_message, error_message = False, None, None
+    route = "STS"
+    try:
+        with st.spinner("카톡 대화를 읽고 있어요…"):
+            for event in respond_stream_image(st.session_state.session_id, image_bytes, mime,
+                                              ocr_profile="kakao", sender_names=sender_names):
+                etype = event.get("type")
+                if etype == "ocr":
+                    if event.get("status") == "completed":
+                        extracted_text = event.get("user_text")
+                        if extracted_text:
+                            st.session_state.messages[-1]["content"] = extracted_text
+                        else:
+                            error_message = "캡쳐에서 내 발화를 찾지 못했어요. 화면을 다시 확인해주세요."
+                    else:
+                        error_message = event.get("error") or "이미지를 읽지 못했어요."
+                elif etype == "input_required":
+                    error_message = error_message or (event.get("message") or "이미지를 다시 확인해주세요.")
+                elif etype == "progress":
+                    stage = event.get("stage")
+                    if stage == "analyze":
+                        steps["safety"] = ("✅", "done"); steps["classify"] = ("✅", "done")
+                        render_pipeline(steps)
+                    elif stage == "route":
+                        steps["router"] = ("✅", "done"); steps["rag"] = ("✅", "done")
+                        steps["openai"] = ("⏳", "processing"); render_pipeline(steps)
+                    elif stage == "generate":
+                        steps["openai"] = ("✅", "done"); render_pipeline(steps)
+                elif etype == "meta":
+                    primary = event.get("primary")
+                    labels = event.get("labels") or []
+                    confidence = next((l["score"] for l in labels if l["label"] == primary), 0.0)
+                elif etype == "crisis":
+                    is_crisis = True
+                    crisis_message = event.get("message") or "🚨 위기 상황이 감지되었습니다."
+                    steps["safety"] = ("🚨", "crisis"); render_pipeline(steps)
+                elif etype == "chunks":
+                    route = "RAG" if event.get("chunks") else "STS"
+                elif etype == "token":
+                    assistant_parts.append(event.get("text", ""))
+                elif etype == "done":
+                    break
+    except Exception as e:
+        error_message = f"게이트웨이 연결 오류: {e}"
+
+    if error_message and not extracted_text:
+        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ {error_message}", "time": now_str})
+        st.rerun()
+
+    if is_crisis:
+        st.session_state.messages.append({"role": "assistant", "content": crisis_message, "time": now_str})
+        if st.session_state.user_location:
+            loc = st.session_state.user_location
+            st.session_state.last_crisis_result = get_centers(loc["sido"], loc["sigungu"], is_crisis=True)
+        else:
+            st.session_state.awaiting_location = True
+        st.rerun()
+
+    steps["openai"] = ("✅", "done"); render_pipeline(steps)
+    ai_response = "".join(assistant_parts).strip() or "응답을 생성하지 못했어요."
+    st.session_state.messages.append({"role": "assistant", "content": ai_response,
+                                      "time": datetime.now().strftime("%H:%M"),
+                                      "meta": {"distortion": primary, "confidence": confidence}})
+    if primary:
+        st.session_state.distortion_history.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "user_text": extracted_text or "(카톡 캡쳐)", "distortion": primary,
+            "confidence": confidence, "route": route,
+        })
     st.rerun()
