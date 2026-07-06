@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from api_client import explain_turn, get_session
+from demo_data import DEMO_USER_ID, demo_stats_rows
 from ui_theme import PALETTE as P
 from ui_theme import apply_theme, render_sidebar, render_topbar
 
@@ -19,73 +20,15 @@ CHART = P["chart"]
 GRID_COLOR = P["border"]
 FONT = dict(family="Nunito, sans-serif", color=P["muted_fg"], size=12)
 
-# ── 기관 관리자 보기 (토글) — 예시 환자 1명 기준, 전부 목업 데이터 ──
-# st.stop()으로 여기서 끝내기 때문에 아래 개인용 코드는 전혀 안 건드려도 된다.
+# ── 기관 관리자 보기 (토글) — 켜면 데모 사용자의 세션 집계(픽스처)를 아래 메인 대시보드로 보여준다 ──
+# (기존 목업 차트/설문은 실데이터화 요청에 따라 제거 — 관리자 뷰도 메인 흐름의 픽스처 집계를 그대로 쓴다.)
 admin_view = st.toggle("🏥 기관 관리자로 보기 (환자)", key="admin_view_toggle")
 if admin_view:
-    st.markdown(f"""
+    st.markdown("""
 <span class="ac-chip chip-sky">🏥 기관 관리자용</span>
-<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록</h1>
+<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록 (세션 집계)</h1>
 """, unsafe_allow_html=True)
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-
-    _admin_plotly_layout = dict(margin=dict(t=10, b=10, l=10, r=10),
-                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=FONT)
-
-    # (1) 날짜별 이용 추이
-    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:6px;">📈 날짜별 서비스 이용 추이</div>',
-               unsafe_allow_html=True)
-    usage_df = pd.DataFrame([
-        {"date": "2026-06-30", "count": 1}, {"date": "2026-07-01", "count": 2},
-        {"date": "2026-07-02", "count": 0}, {"date": "2026-07-03", "count": 3},
-        {"date": "2026-07-04", "count": 1}, {"date": "2026-07-05", "count": 2},
-    ])
-    fig_usage = go.Figure(go.Scatter(x=usage_df["date"], y=usage_df["count"],
-                                     mode="lines+markers", line=dict(color=P["primary"], width=3),
-                                     marker=dict(size=8)))
-    fig_usage.update_layout(**_admin_plotly_layout, height=280)
-    fig_usage.update_xaxes(gridcolor=GRID_COLOR, griddash="dash")
-    fig_usage.update_yaxes(gridcolor=GRID_COLOR, griddash="dash", title="대화 횟수")
-    st.plotly_chart(fig_usage, use_container_width=True)
-
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-
-    # (2) 인지왜곡 유형 빈도
-    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:6px;">🧠 인지왜곡 유형 빈도</div>',
-               unsafe_allow_html=True)
-    dist_df = pd.DataFrame([
-        {"label": "과잉일반화", "count": 5}, {"label": "흑백 사고", "count": 3},
-        {"label": "감정적 추론", "count": 2},
-    ])
-    fig_dist = go.Figure(go.Bar(
-        x=dist_df["label"], y=dist_df["count"],
-        marker=dict(color=[CHART[i % len(CHART)] for i in range(len(dist_df))]),
-    ))
-    fig_dist.update_layout(**_admin_plotly_layout, height=280, barcornerradius=10, showlegend=False)
-    fig_dist.update_xaxes(showgrid=False)
-    fig_dist.update_yaxes(gridcolor=GRID_COLOR, griddash="dash")
-    st.plotly_chart(fig_dist, use_container_width=True)
-
-    st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-
-    # (3) 설문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
-    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 설문 응답 (진료·상담 이력)</div>',
-               unsafe_allow_html=True)
-    survey_answers = [
-        ("기존 상담 경험", "있음"),
-        ("기존 진단/치료 경험", "없음"),
-        ("현재 도움받는 사람/기관", "없음"),
-        ("어느 정도로 이야기하고 싶어요?", "자세히"),
-        ("위기 상황에서 선호하는 도움 방식", "가까운 기관 안내, 긴급전화 표시, 비상연락처 표시"),
-    ]
-    for title, answer in survey_answers:
-        st.markdown(f"""
-<div class="ac-card" style="padding:.9rem 1.2rem;margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:center;">
-  <span style="font-size:.85rem;color:{P['muted_fg']};">{title}</span>
-  <b style="color:{P['primary']};">{answer}</b>
-</div>""", unsafe_allow_html=True)
-
-    st.stop()
+    st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
 
 
 # ── 샘플 데이터 (백엔드 세션이 없을 때만 사용) ────────────────────
@@ -151,10 +94,18 @@ with st.expander("🔎 조회할 세션 ID", expanded=False):
         help="비워두면 현재 대화 세션(방금 대화하기에서 쓰던 session_id)을 사용합니다.")
 session_id = (session_id_input or default_session or "").strip()
 
-history = load_session_turns(session_id) if session_id else []
-using_sample = len(history) == 0
-if using_sample:
-    history = make_sample_data()
+# [데모] 특정 데모 id 를 조회하거나 관리자 토글이면, 그 사용자의 세션들을 가로지른 집계 통계를
+# 프론트 내장 픽스처(실라벨·합성날짜)로 보여준다 — "데모 id 로 대시보드 사용 시 UI 반영".
+# 발화는 배포 분류기로 실제 라벨링했고 세션 볼륨·날짜만 합성 — 라이브 Cosmos 파이프라인은 아님.
+is_demo = admin_view or session_id == DEMO_USER_ID
+if is_demo:
+    history = demo_stats_rows()
+    using_sample = False
+else:
+    history = load_session_turns(session_id) if session_id else []
+    using_sample = len(history) == 0
+    if using_sample:
+        history = make_sample_data()
 
 df_all = pd.DataFrame(history)
 df_all["timestamp"] = pd.to_datetime(df_all["timestamp"], utc=True).dt.tz_localize(None)
@@ -183,7 +134,11 @@ else:
 if df.empty:
     df = df_all  # 필터 결과가 없으면 전체 표시
 
-if using_sample:
+if is_demo:
+    from demo_data import DEMO_SESSION_COUNT
+    st.caption(f"🧪 데모 통계 — 사용자 `{DEMO_USER_ID}` 의 세션 {DEMO_SESSION_COUNT}개를 가로질러 집계한 "
+               f"기록 {len(df_all)}건(왜곡 라벨 단위). 기간 필터·분포는 실제로 동작합니다.")
+elif using_sample:
     if session_id:
         st.info(f"💡 세션 `{session_id[:8]}…` 에 저장된 대화 기록을 찾지 못했어요. 샘플 데이터로 미리 보여드려요.")
     else:
@@ -295,7 +250,8 @@ letters = "".join(
         <div style="font-weight:700;font-size:.9rem;">{(r.user_text[:28] + '…') if len(r.user_text) > 28 else r.user_text}</div>
         <span style="font-size:.72rem;color:{P['muted_fg']};white-space:nowrap;">{rel_date(r.timestamp)}</span>
       </div>
-      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
+      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+        {f'<span class="ac-chip chip-lilac">📁 {getattr(r, "session_name", "")}</span>' if getattr(r, "session_name", "") else ''}
         <span class="ac-chip chip-coral">{r.distortion}</span>
         <span class="ac-chip chip-sky">{r.route}</span>
       </div>
@@ -339,7 +295,7 @@ st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
 # ── 연산 과정 보기 (SHAP) — 실제 세션 데이터가 있을 때만 노출 ─────
 # 캐싱하지 않고 버튼을 누를 때마다 백엔드(cogdist)에서 새로 계산한다 (팀 결정: 구현 단순성 우선).
-if not using_sample:
+if not using_sample and not is_demo:  # SHAP은 실제 게이트웨이 세션이 필요 — 데모 픽스처엔 미노출
     with st.expander("🔬 연산 과정 보기 — 분류기가 어떤 단어에 주목했는지"):
         st.caption("특정 발화를 골라 SHAP 값을 계산합니다. 매 요청마다 새로 계산되어 몇 초~수십 초 걸릴 수 있어요.")
         turn_rows = [r for r in history if r.get("turn_index") is not None]
