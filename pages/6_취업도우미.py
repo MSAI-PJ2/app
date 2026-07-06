@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 from api_client import BACKEND_URL, _headers
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent
 
 load_dotenv()
 
@@ -30,6 +30,9 @@ st.set_page_config(page_title="취업 준비 · 마음갈피", page_icon="🌱",
 apply_theme()
 render_sidebar(active="career")
 render_topbar()
+
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 취업 준비 기능을 이용할 수 없음
+require_consent()
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -10,7 +10,7 @@ from get_centers import get_centers, get_sigungu_list
 from kakao_geo import coords_to_address
 from streamlit_geolocation import streamlit_geolocation
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar, safe_bubble_text
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent, safe_bubble_text
 
 load_dotenv()
 
@@ -18,6 +18,43 @@ st.set_page_config(page_title="대화하기 · 마음숲", page_icon="💬", lay
 apply_theme()
 render_sidebar(active="chat")
 render_topbar()
+
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 채팅 자체를 이용할 수 없음
+require_consent()
+
+# ── 우측 패널 고정 (팀 피드백: "채팅에서 우측 스크롤되지 않게") ──────
+# 채팅이 길어지면 우측 패널(처리 단계/왜곡/위기 카드)이 같이 위로 밀려
+# 사라지는 문제 → position: sticky 로 화면에 고정한다.
+# ⚠️ ui_theme.py 전역 규칙 두 개가 sticky 를 무력화하므로 이 페이지에서만 덮어씀:
+#   1) stHorizontalBlock 의 align-items: stretch → 컬럼이 반대편 높이만큼
+#      늘어나 버리면 sticky 가 움직일 여백이 없음 → flex-start 로.
+#   2) stColumn 내부 div 전부 height:100% → sticky 컨테이너 높이 계산이
+#      깨짐 → auto 로 되돌림.
+# (2026-07-06 참고: ui_theme.py의 이 두 전역 규칙은 홈 화면 카드 전용으로
+#  .st-key-home_hero_row/.st-key-home_menu_row 안으로 스코프를 좁혔지만,
+#  stHorizontalBlock의 align-items:stretch는 flexbox 자체의 기본 동작이라
+#  이 페이지 전용 override는 그대로 필요함)
+# 이 페이지엔 topbar/빠른답장 칩 등 다른 st.columns 도 있어서, 우측 패널에만
+# 존재하는 .pipeline-step 을 :has() 앵커로 써서 정확히 그 컬럼만 잡는다.
+st.markdown("""
+<style>
+div[data-testid="stHorizontalBlock"]:has(.pipeline-step) { align-items: flex-start !important; }
+div[data-testid="stColumn"]:has(.pipeline-step) {
+    position: sticky;
+    top: 0.8rem;
+    align-self: flex-start;
+    max-height: calc(100vh - 1.6rem);
+    overflow-y: auto;          /* 패널 자체가 화면보다 길 때만 내부 스크롤 */
+    scrollbar-width: none;      /* 내부 스크롤바는 숨겨서 깔끔하게 */
+}
+div[data-testid="stColumn"]:has(.pipeline-step)::-webkit-scrollbar { display: none; }
+div[data-testid="stColumn"]:has(.pipeline-step) div { height: auto !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# 인지왜곡 분류기의 라우팅 전용 라벨 — 사용자에게 "왜곡"으로 보여주면 안 됨
+# ('정상'은 왜곡이 없다는 뜻, '불충분'은 판단하기엔 정보가 부족하다는 뜻)
+NON_DISTORTION_LABELS = ("정상", "불충분")
 
 SIDO_OPTIONS = [
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
@@ -79,8 +116,19 @@ col_chat, col_side = st.columns([2, 1], gap="medium")
 
 # ═══════════ 채팅 패널 ═══════════
 with col_chat:
-    # 헤더 (chat.tsx header)
-    st.markdown(f"""
+    # ⚠️ 구조 변경(2026-07-06, "무너진 대화하기 창 UI" 수정): 예전엔 chat-header/
+    # chat-body/chat-footer 를 각각 별개의 st.markdown() 호출로 열고-닫았다.
+    # Streamlit은 st.markdown() 호출마다 독립된 DOM 컨테이너를 만들기 때문에,
+    # 열어놓은 <div>는 그 호출 하나의 컨테이너 안에서만 닫히고, 그 사이에 낀
+    # 실제 위젯(st.button, st.chat_input, st.radio, st.expander 등)은 카드
+    # 바깥의 형제 요소로 렌더링된다 — 카드가 빈 배경 박스로만 보이고 입력창/
+    # 버튼이 카드 밖으로 떨어져 나오는 버그의 원인이었다.
+    # → st.container(key="chat_card") 로 전체(헤더~구성기)를 하나의 진짜 DOM
+    #   컨테이너로 묶고, CSS는 .st-key-chat_card 에 카드 스타일을 입힌다.
+    with st.container(key="chat_card"):
+        # 헤더 배너 — 이 div는 한 번의 st.markdown() 호출 안에서 열고 바로
+        # 닫으므로 안전하다 (다른 위젯을 안에 담지 않음).
+        st.markdown(f"""
 <div class="chat-header">
   <div style="display:flex;align-items:center;gap:12px;">
     <div style="width:44px;height:44px;border-radius:16px;background:{P['cream']};
@@ -100,143 +148,137 @@ with col_chat:
   </div>
 </div>""", unsafe_allow_html=True)
 
-    # 메시지 영역 (chat.tsx messages) — 아바타 + 말풍선 + 메타칩 + 시각
-    # ⚠️ 예전엔 메시지 전체를 문자열 하나로 합쳐서 한 번에 st.markdown() 했는데,
-    # 그러면 답변 하나의 구조 때문에 raw-HTML 블록 인식이 중간에 깨질 경우 그
-    # 뒤에 오는 모든 메시지가 영향을 받는다(<div class="msg-time"> 코드 노출 버그).
-    # 메시지마다 별도의 st.markdown() 호출로 렌더링해서 서로 완전히 격리시킨다.
-    st.markdown('<div class="chat-body">', unsafe_allow_html=True)
-    if not st.session_state.messages:
-        st.markdown("""
+        # 메시지 영역 (chat.tsx messages) — 아바타 + 말풍선 + 메타칩 + 시각
+        # ⚠️ 메시지 전체를 문자열 하나로 합쳐서 한 번에 st.markdown() 하면, 답변
+        # 하나의 구조 때문에 raw-HTML 블록 인식이 중간에 깨질 경우 그 뒤에 오는
+        # 모든 메시지가 영향을 받는다(<div class="msg-time"> 코드 노출 버그).
+        # 메시지마다 별도의 st.markdown() 호출로 렌더링해서 서로 완전히 격리시킨다.
+        # (카드 배경은 이제 .st-key-chat_card 가 담당하므로 별도 래퍼 div 불필요)
+        if not st.session_state.messages:
+            st.markdown("""
 <div class="msg-row">
   <div class="msg-avatar bot">🍃</div>
   <div class="msg-col">
     <div class="bubble bot">안녕하세요! 오늘은 어떤 마음이 마을에 놀러왔나요? 편지 쓰듯 편하게 적어주세요 🍃</div>
   </div>
 </div>""", unsafe_allow_html=True)
-    for msg in st.session_state.messages:
-        time_str = msg.get("time", "")
-        if msg["role"] == "user":
-            st.markdown(f"""
+        for msg in st.session_state.messages:
+            time_str = msg.get("time", "")
+            if msg["role"] == "user":
+                st.markdown(f"""
 <div class="msg-row me">
   <div class="msg-col me">
     <div class="bubble me">{safe_bubble_text(msg["content"])}</div>
   </div>
   <div class="msg-avatar me">🐰</div>
 </div>""", unsafe_allow_html=True)
-            # ⚠️ 시간 표시는 raw HTML(<div class="msg-time">)이 아니라 Streamlit 네이티브
-            # st.caption()으로 렌더링한다 — HTML 파싱 자체를 안 거치므로 태그가 텍스트로
-            # 노출되는 버그가 구조적으로 발생할 수 없다. (디자인 손실: 우측 정렬은 못 함)
-            st.caption(time_str)
-        else:
-            meta = msg.get("meta") or {}
-            meta_html = ""
-            if meta.get("distortion"):
-                sev = f'<span class="ac-chip chip-sunny">신뢰도 {meta["confidence"]:.0%}</span>' if meta.get("confidence") else ""
-                meta_html = f'<div class="msg-meta"><span class="ac-chip chip-coral">🧠 {meta["distortion"]}</span>{sev}</div>'
-            st.markdown(f"""
+                # ⚠️ 시간 표시는 raw HTML(<div class="msg-time">)이 아니라 Streamlit 네이티브
+                # st.caption()으로 렌더링한다 — HTML 파싱 자체를 안 거치므로 태그가 텍스트로
+                # 노출되는 버그가 구조적으로 발생할 수 없다. (디자인 손실: 우측 정렬은 못 함)
+                st.caption(time_str)
+            else:
+                # 답변 밑에는 어떤 배지(왜곡 유형/신뢰도 등)도 표시하지 않음 — 사용자 요청으로
+                # 전체 메타칩 제거. 왜곡 유형은 사이드 "처리 단계" 패널에서만 참고용으로 보여준다.
+                st.markdown(f"""
 <div class="msg-row">
   <div class="msg-avatar bot">🍃</div>
   <div class="msg-col">
     <div class="bubble bot">{safe_bubble_text(msg["content"])}</div>
-    {meta_html}
   </div>
 </div>""", unsafe_allow_html=True)
-            st.caption(time_str)
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.caption(time_str)
 
-    # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
-    st.markdown('<div class="chat-footer">', unsafe_allow_html=True)
-    quick = ["🌱 오늘 있었던 일", "🌧️ 속상한 마음", "🌟 다시 생각해보기", "🌸 감사한 순간"]
-    qcols = st.columns(len(quick))
-    for qc, q in zip(qcols, quick):
-        with qc:
-            if st.button(q, key=f"quick_{q}", use_container_width=True):
-                st.session_state.queued_input = q[2:].strip() + "에 대해 이야기하고 싶어요"
-                st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div class="chat-footer-divider"></div>', unsafe_allow_html=True)
 
-    # ── 위기 감지 후 위치 입력 대기 (변경 없음 — GPS + selectbox 폴백) ──
-    if st.session_state.awaiting_location:
-        st.markdown('<div class="crisis-card">', unsafe_allow_html=True)
-        st.markdown("📍 **가까운 기관을 안내해드릴게요.**")
+        # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
+        # (이제 chat_card 컨테이너 안에 실제로 위치하므로 카드 밖으로 나오지 않음)
+        quick = ["🌱 오늘 있었던 일", "🌧️ 속상한 마음", "🌟 다시 생각해보기", "🌸 감사한 순간"]
+        qcols = st.columns(len(quick))
+        for qc, q in zip(qcols, quick):
+            with qc:
+                if st.button(q, key=f"quick_{q}", use_container_width=True):
+                    st.session_state.queued_input = q[2:].strip() + "에 대해 이야기하고 싶어요"
+                    st.rerun()
 
-        # 위치 동의는 설문(4_설문.py)의 동의란에서 미리 받아둔 값을 사용 — 여기서 다시 묻지 않음
-        _profile = st.session_state.get("user_profile") or {}
-        location_consent = bool(_profile.get("privacy", {}).get("allow_location_use"))
+        # ── 위기 감지 후 위치 입력 대기 (GPS + selectbox 폴백) ──
+        # crisis-card 도 같은 이유로 st.container(key="crisis_card")로 교체.
+        if st.session_state.awaiting_location:
+            with st.container(key="crisis_card"):
+                st.markdown("📍 **가까운 기관을 안내해드릴게요.**")
 
-        sido_gps, sigungu_gps = None, None
-        if location_consent:
-            st.caption("설문에서 위치 정보 사용에 동의하셨어요 — 자동으로 가까운 지역을 찾아드릴게요.")
-            location = streamlit_geolocation()
+                # 위치 동의는 사전 질문(4_설문.py)의 동의란에서 미리 받아둔 값을 사용 — 여기서 다시 묻지 않음
+                _profile = st.session_state.get("user_profile") or {}
+                location_consent = bool(_profile.get("privacy", {}).get("allow_location_use"))
 
-            if location and location.get("latitude"):
-                lat, lon = location["latitude"], location["longitude"]
-                region = coords_to_address(lat, lon)
-                if region:
-                    sido_gps = region["시도"]
-                    sigungu_gps = region["시군구"]
-                    st.success(f"📍 위치 자동 감지: {sido_gps} {sigungu_gps}")
+                sido_gps, sigungu_gps = None, None
+                if location_consent:
+                    st.caption("사전 질문에서 위치 정보 사용에 동의하셨어요 — 자동으로 가까운 지역을 찾아드릴게요.")
+                    location = streamlit_geolocation()
+
+                    if location and location.get("latitude"):
+                        lat, lon = location["latitude"], location["longitude"]
+                        region = coords_to_address(lat, lon)
+                        if region:
+                            sido_gps = region["시도"]
+                            sigungu_gps = region["시군구"]
+                            st.success(f"📍 위치 자동 감지: {sido_gps} {sigungu_gps}")
+                        else:
+                            st.warning("좌표를 행정구역으로 변환하지 못했어요. 아래에서 직접 선택해주세요.")
                 else:
-                    st.warning("좌표를 행정구역으로 변환하지 못했어요. 아래에서 직접 선택해주세요.")
-        else:
-            st.caption("위치 정보 사용에 동의하지 않으셨어요. 아래에서 지역을 직접 선택해주세요. (설문에서 동의하시면 다음부터는 자동으로 찾아드려요)")
+                    st.caption("위치 정보 사용에 동의하지 않으셨어요. 아래에서 지역을 직접 선택해주세요. (사전 질문에서 동의하시면 다음부터는 자동으로 찾아드려요)")
 
-        if sido_gps:
-            if st.button(f"📍 {sido_gps} {sigungu_gps} 기준으로 기관 찾기", key="crisis_gps_btn"):
-                st.session_state.user_location = {"sido": sido_gps, "sigungu": sigungu_gps}
-                result = get_centers(sido_gps, sigungu_gps, is_crisis=True)
-                st.session_state.last_crisis_result = result
+                if sido_gps:
+                    if st.button(f"📍 {sido_gps} {sigungu_gps} 기준으로 기관 찾기", key="crisis_gps_btn"):
+                        st.session_state.user_location = {"sido": sido_gps, "sigungu": sigungu_gps}
+                        result = get_centers(sido_gps, sigungu_gps, is_crisis=True)
+                        st.session_state.last_crisis_result = result
+                        st.session_state.awaiting_location = False
+                        st.rerun()
+
+                with st.expander("다른 지역으로 직접 선택하기" if sido_gps else "지역 직접 선택하기", expanded=not sido_gps):
+                    sido = st.selectbox("시/도 선택", SIDO_OPTIONS, key="crisis_sido")
+                    sigungu_options = ["전체"] + get_sigungu_list(sido)
+                    sigungu_selected = st.selectbox("시/군/구 선택", sigungu_options, key="crisis_sigungu")
+                    sigungu = None if sigungu_selected == "전체" else sigungu_selected
+
+                    if st.button("이 지역으로 기관 찾기", key="crisis_search_btn"):
+                        st.session_state.user_location = {"sido": sido, "sigungu": sigungu or None}
+                        result = get_centers(sido, sigungu or None, is_crisis=True)
+                        st.session_state.last_crisis_result = result
+                        st.session_state.awaiting_location = False
+                        st.rerun()
+
+        # 직전 위기 결과 표시 (변경 없음)
+        if st.session_state.get("last_crisis_result"):
+            render_crisis_result(st.session_state.last_crisis_result)
+
+        # composer — 입력 방식 선택 (텍스트/음성/카톡 캡쳐)
+        input_mode = st.radio("입력 방식", ["✍️ 텍스트", "🎙️ 음성", "🖼️ 카톡 캡쳐"],
+                              horizontal=True, label_visibility="collapsed", key="input_mode")
+
+        user_input = None
+        audio_value = None
+        image_value = None
+        if input_mode == "✍️ 텍스트":
+            user_input = st.chat_input("여울이에게 편지를 써보세요…")
+        elif input_mode == "🎙️ 음성":
+            audio_value = st.audio_input("마이크로 말해보세요", key=f"audio_input_{st.session_state.input_widget_seq}")
+        elif input_mode == "🖼️ 카톡 캡쳐":
+            image_value = st.file_uploader("카톡 대화 캡쳐를 올려주세요", type=["png", "jpg", "jpeg"],
+                                       key=f"image_uploader_{st.session_state.input_widget_seq}")
+            kakao_sender = st.text_input("상대방 이름 (선택 — 있으면 화자 구분이 더 정확해요)", key="kakao_sender")
+
+        # 대화 초기화 (변경 없음)
+        if st.session_state.messages:
+            if st.button("🗑️ 대화 초기화", type="secondary"):
+                st.session_state.messages = []
+                st.session_state.session_id = str(uuid.uuid4())  # 새 대화 = 새 Cosmos 세션
                 st.session_state.awaiting_location = False
+                st.session_state.last_crisis_result = None
+                st.session_state.user_location = None
+                st.session_state.pop("crisis_sido", None)
+                st.session_state.pop("crisis_sigungu", None)
                 st.rerun()
-
-        with st.expander("다른 지역으로 직접 선택하기" if sido_gps else "지역 직접 선택하기", expanded=not sido_gps):
-            sido = st.selectbox("시/도 선택", SIDO_OPTIONS, key="crisis_sido")
-            sigungu_options = ["전체"] + get_sigungu_list(sido)
-            sigungu_selected = st.selectbox("시/군/구 선택", sigungu_options, key="crisis_sigungu")
-            sigungu = None if sigungu_selected == "전체" else sigungu_selected
-
-            if st.button("이 지역으로 기관 찾기", key="crisis_search_btn"):
-                st.session_state.user_location = {"sido": sido, "sigungu": sigungu or None}
-                result = get_centers(sido, sigungu or None, is_crisis=True)
-                st.session_state.last_crisis_result = result
-                st.session_state.awaiting_location = False
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # 직전 위기 결과 표시 (변경 없음)
-    if st.session_state.get("last_crisis_result"):
-        render_crisis_result(st.session_state.last_crisis_result)
-
-    # composer — 입력 방식 선택 (텍스트/음성/카톡 캡쳐)
-    input_mode = st.radio("입력 방식", ["✍️ 텍스트", "🎙️ 음성", "🖼️ 카톡 캡쳐"],
-                          horizontal=True, label_visibility="collapsed", key="input_mode")
-
-    user_input = None
-    audio_value = None
-    image_value = None
-    if input_mode == "✍️ 텍스트":
-        user_input = st.chat_input("여울이에게 편지를 써보세요…")
-    elif input_mode == "🎙️ 음성":
-        audio_value = st.audio_input("마이크로 말해보세요", key=f"audio_input_{st.session_state.input_widget_seq}")
-    elif input_mode == "🖼️ 카톡 캡쳐":
-        image_value = st.file_uploader("카톡 대화 캡쳐를 올려주세요", type=["png", "jpg", "jpeg"],
-                                   key=f"image_uploader_{st.session_state.input_widget_seq}")
-        kakao_sender = st.text_input("상대방 이름 (선택 — 있으면 화자 구분이 더 정확해요)", key="kakao_sender")  
-    
-    
-    
-    # 대화 초기화 (변경 없음)
-    if st.session_state.messages:
-        if st.button("🗑️ 대화 초기화", type="secondary"):
-            st.session_state.messages = []
-            st.session_state.session_id = str(uuid.uuid4())  # 새 대화 = 새 Cosmos 세션
-            st.session_state.awaiting_location = False
-            st.session_state.last_crisis_result = None
-            st.session_state.user_location = None
-            st.session_state.pop("crisis_sido", None)
-            st.session_state.pop("crisis_sigungu", None)
-            st.rerun()
 
 # ═══════════ 사이드 패널 (chat.tsx aside) ═══════════
 with col_side:
@@ -257,7 +299,8 @@ with col_side:
     st.divider()
 
     # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
-    hist = st.session_state.distortion_history
+    # '불충분'은 인지왜곡이 아니라 라우팅 라벨이므로 이 통계에서 제외한다.
+    hist = [h for h in st.session_state.distortion_history if h.get("distortion") not in NON_DISTORTION_LABELS]
     bar_tones = ["#E39A86", "#D9B8E8", "#C4DCEA", "#F3DD8F"]
     if hist:
         counts = Counter(h["distortion"] for h in hist).most_common(4)

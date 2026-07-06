@@ -9,26 +9,88 @@ import streamlit as st
 from api_client import explain_turn, get_session
 from demo_data import DEMO_USER_ID, DEMO_LOGIN_UID, demo_stats_rows
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent
 
 st.set_page_config(page_title="마음 일기 · 마음숲", page_icon="📊", layout="wide")
 apply_theme()
 render_sidebar(active="analytics")
 render_topbar()
 
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 분석 대시보드를 이용할 수 없음
+require_consent()
+
 CHART = P["chart"]
 GRID_COLOR = P["border"]
 FONT = dict(family="Nunito, sans-serif", color=P["muted_fg"], size=12)
 
-# ── 기관 관리자 보기 (토글) — 켜면 데모 사용자의 세션 집계(픽스처)를 아래 메인 대시보드로 보여준다 ──
-# (기존 목업 차트/설문은 실데이터화 요청에 따라 제거 — 관리자 뷰도 메인 흐름의 픽스처 집계를 그대로 쓴다.)
-admin_view = st.toggle("🏥 기관 관리자로 보기 (환자)", key="admin_view_toggle")
+# ── 기관 보고서 보기 (토글) — 예시 환자 1명 기준, 전부 목업 데이터 ──
+# ⚠️ "관리자"라는 표현은 쓰지 않기로 결정 (유관기관에 가져가는 문서이므로 "보고서"로 통일)
+# st.stop()으로 여기서 끝내기 때문에 아래 개인용 코드는 전혀 안 건드려도 된다.
+admin_view = st.toggle("🏥 기관 제출용 보고서 보기 (환자)", key="report_view_toggle")
 if admin_view:
-    st.markdown("""
-<span class="ac-chip chip-sky">🏥 기관 관리자용</span>
-<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록 (세션 집계)</h1>
+    st.markdown(f"""
+<span class="ac-chip chip-sky">🏥 기관 제출용 보고서</span>
+<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록 보고서</h1>
 """, unsafe_allow_html=True)
-    st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    _admin_plotly_layout = dict(margin=dict(t=10, b=10, l=10, r=10),
+                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=FONT)
+
+    # (1) 날짜별 이용 추이
+    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:6px;">📈 날짜별 서비스 이용 추이</div>',
+               unsafe_allow_html=True)
+    usage_df = pd.DataFrame([
+        {"date": "2026-06-30", "count": 1}, {"date": "2026-07-01", "count": 2},
+        {"date": "2026-07-02", "count": 0}, {"date": "2026-07-03", "count": 3},
+        {"date": "2026-07-04", "count": 1}, {"date": "2026-07-05", "count": 2},
+    ])
+    fig_usage = go.Figure(go.Scatter(x=usage_df["date"], y=usage_df["count"],
+                                     mode="lines+markers", line=dict(color=P["primary"], width=3),
+                                     marker=dict(size=8)))
+    fig_usage.update_layout(**_admin_plotly_layout, height=280)
+    fig_usage.update_xaxes(gridcolor=GRID_COLOR, griddash="dash")
+    fig_usage.update_yaxes(gridcolor=GRID_COLOR, griddash="dash", title="대화 횟수")
+    st.plotly_chart(fig_usage, use_container_width=True)
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # (2) 인지왜곡 유형 빈도
+    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:6px;">🧠 인지왜곡 유형 빈도</div>',
+               unsafe_allow_html=True)
+    dist_df = pd.DataFrame([
+        {"label": "과잉일반화", "count": 5}, {"label": "흑백 사고", "count": 3},
+        {"label": "감정적 추론", "count": 2},
+    ])
+    fig_dist = go.Figure(go.Bar(
+        x=dist_df["label"], y=dist_df["count"],
+        marker=dict(color=[CHART[i % len(CHART)] for i in range(len(dist_df))]),
+    ))
+    fig_dist.update_layout(**_admin_plotly_layout, height=280, barcornerradius=10, showlegend=False)
+    fig_dist.update_xaxes(showgrid=False)
+    fig_dist.update_yaxes(gridcolor=GRID_COLOR, griddash="dash")
+    st.plotly_chart(fig_dist, use_container_width=True)
+
+    st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+
+    # (3) 사전 질문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
+    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 사전 질문 응답 (진료·상담 이력)</div>',
+               unsafe_allow_html=True)
+    survey_answers = [
+        ("기존 상담 경험", "있음"),
+        ("기존 진단/치료 경험", "없음"),
+        ("현재 도움받는 사람/기관", "없음"),
+        ("어느 정도로 이야기하고 싶어요?", "자세히"),
+        ("위기 상황에서 선호하는 도움 방식", "가까운 기관 안내, 긴급전화 표시, 비상연락처 표시"),
+    ]
+    for title, answer in survey_answers:
+        st.markdown(f"""
+<div class="ac-card" style="padding:.9rem 1.2rem;margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:center;">
+  <span style="font-size:.85rem;color:{P['muted_fg']};">{title}</span>
+  <b style="color:{P['primary']};">{answer}</b>
+</div>""", unsafe_allow_html=True)
+
+    st.stop()
 
 
 # ── 샘플 데이터 (백엔드 세션이 없을 때만 사용) ────────────────────
@@ -94,11 +156,12 @@ with st.expander("🔎 조회할 세션 ID", expanded=False):
         help="비워두면 현재 대화 세션(방금 대화하기에서 쓰던 session_id)을 사용합니다.")
 session_id = (session_id_input or default_session or "").strip()
 
-# [데모 id 트리거] ① 데모 이메일로 로그인(user_id==DEMO_LOGIN_UID) ② 관리자 토글
-# ③ 조회 세션 ID 에 DEMO_USER_ID 입력 — 셋 중 하나면 그 사용자의 세션들을 가로지른 집계
-# 통계를 프론트 내장 픽스처(실라벨·합성날짜)로 보여준다. 발화는 배포 분류기로 실제 라벨링했고
-# 세션 볼륨·날짜만 합성 — 라이브 Cosmos 파이프라인은 아님.
-is_demo = (admin_view or session_id == DEMO_USER_ID
+# [데모 id 트리거] ① 데모 이메일로 로그인(user_id==DEMO_LOGIN_UID) ② 조회 세션 ID 에
+# DEMO_USER_ID 입력 — 둘 중 하나면 그 사용자의 세션들을 가로지른 집계 통계를 프론트 내장
+# 픽스처(실라벨·합성날짜)로 주입한다. 발화는 배포 분류기로 실제 라벨링했고 세션 볼륨·날짜만
+# 합성 — 라이브 Cosmos 파이프라인은 아님. (기관 '보고서' 토글은 위에서 st.stop 으로 끝나는
+# 별개 목업이라 데모 트리거가 아니다 — main 최신화로 관리자 토글→보고서 목업 채택)
+is_demo = (session_id == DEMO_USER_ID
            or st.session_state.get("user_id") == DEMO_LOGIN_UID)
 if is_demo:
     history = demo_stats_rows()
