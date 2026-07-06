@@ -9,7 +9,7 @@ from ui_theme import apply_theme, img_b64, render_sidebar, render_topbar, resolv
 load_dotenv()
 
 st.set_page_config(
-    page_title="마을 광장 · 마음숲",
+    page_title="마을 광장 · 마음갈피",
     page_icon="🍃",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -56,116 +56,86 @@ services = [
 ]
 all_on = all(on for _, _, _, on, _ in services)
 
-# ── 히어로 (index.tsx Hero 섹션) ──────────────────────────────────
-hero = img_b64("village-hero.jpg")
+# ── 히어로 + 여울이 프로필 (좌우 배치) ────────────────────────────
+hero = img_b64("bookmark-hero.svg")
 hero_bg = (
     f'background-image: linear-gradient(to top, rgba(255,248,231,0.96) 8%, rgba(255,248,231,0.45) 45%, transparent), url("{hero}");'
     if hero else
     "background-image: linear-gradient(135deg, #c0f8e5 0%, #eaf7ce 55%, #fdf1c7 100%);"
 )
-st.markdown(f"""
-<div class="ac-card" style='position:relative; overflow:hidden; margin-bottom:0; {hero_bg}
-     background-size:cover; background-position:center 65%;
-     border-bottom-left-radius:0; border-bottom-right-radius:0;'>
-  <div style="padding:7.5rem 1.8rem 1.2rem;">
-    <span class="ac-chip chip-sunny">🍃 오늘의 마을</span>
-    <h1 style="margin:.5rem 0 .2rem; font-size:2rem;">어서와요, 오늘도 마음숲에 오신 걸 환영해요</h1>
-    <p style="margin:0; font-size:.92rem; color:{P['muted_fg']};">
-      작은 생각도 함께 나누면 큰 나무가 돼요. 편하게 대화를 시작해보세요.</p>
-    <a href="/채팅" target="_self" class="btn-primary"
-       style="position:absolute; right:1.8rem; bottom:1.4rem;">💌 대화 시작하기</a>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
-# ── 마을 상점 상태 + 여울이 주민카드 (index.tsx grid 섹션) ────────
-col_shop, col_villager = st.columns([2, 1], gap="medium")
+# 세션 이력 기반 실제 통계 (없으면 0으로 표시)
+hist = st.session_state.get("distortion_history", [])
+n_chat = len(hist)
+n_reframe = len([h for h in hist if h.get("distortion") not in (None, "정상")])
+n_days = len({h["timestamp"][:10] for h in hist}) if hist else 0
 
-with col_shop:
-    tiles = ""
-    for name, desc, emoji, on, tone in services:
-        state_chip = (
-            f'<span class="ac-chip chip-leaf">🟢 문 열림</span>' if on
-            else f'<span class="ac-chip chip-coral">🔴 닫힘</span>'
-        )
-        tiles += f"""
-        <div style="display:flex; align-items:center; gap:12px; border:1px solid {P['border']};
-                    background:rgba(255,248,231,0.6); border-radius:20px; padding:14px 16px;">
-            <div class="ac-chip {tone}" style="width:44px;height:44px;justify-content:center;
-                 border-radius:16px;font-size:20px;padding:0;">{emoji}</div>
-            <div style="flex:1;min-width:0;">
-                <div class="font-display" style="font-size:.9rem;">{name}</div>
-                <div style="font-size:.75rem;color:{P['muted_fg']};">{desc}</div>
-            </div>
-            {state_chip}
+# 오늘의 활동: 이력 상위 3개 왜곡 유형 (없으면 index.tsx 기본값)
+if hist:
+    from collections import Counter
+    top3 = Counter(h["distortion"] for h in hist).most_common(3)
+    activities = [(f"{r}st" if r == 1 else f"{r}nd" if r == 2 else f"{r}rd", name, f"{cnt}회")
+                  for r, (name, cnt) in enumerate(top3, start=1)]
+else:
+    activities = [("1st", "따뜻한 대화", "0회"), ("2nd", "생각 재구성", "0회"), ("3rd", "감정 일기", "0회")]
+
+tones = ["chip-sunny", "chip-coral", "chip-lilac"]
+act_rows = "".join(
+    f"""<div style="display:flex;justify-content:space-between;align-items:center;
+            border:1px solid {P['border']};background:rgba(255,248,231,0.6);
+            border-radius:16px;padding:8px 12px;margin:6px 0;">
+          <span style="font-size:.82rem;font-weight:700;">
+            <span class="ac-chip {tones[i % 3]}">{rank}</span>&nbsp; {label}</span>
+          <span style="font-size:.72rem;color:{P['muted_fg']};">{meta}</span>
         </div>"""
+    for i, (rank, label, meta) in enumerate(activities)
+)
+
+col_hero, col_villager = st.columns([2, 1], gap="medium")
+
+with col_hero:
     st.markdown(f"""
-    <div class="ac-card" style="padding:1.5rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <div>
-          <h2 style="margin:0;font-size:1.25rem;">마을 상점 상태</h2>
-          <p style="margin:0;font-size:.85rem;color:{P['muted_fg']};">오늘 문을 연 서비스들이에요</p>
-        </div>
-        <span class="ac-chip">🛎️ 실시간</span>
+    <div class="ac-card" style='position:relative; overflow:hidden; height:100%; {hero_bg}
+         background-size:cover; background-position:center center;'>
+      <div style="padding:6.5rem 1.8rem 1.2rem;">
+        <span class="ac-chip chip-sunny">🍃 오늘의 서재</span>
+        <h1 style="margin:.5rem 0 .2rem; font-size:1.8rem;">어서와요, 오늘도 마음갈피와 함께해요</h1>
+        <p style="margin:0; font-size:.9rem; color:{P['muted_fg']};">
+          작은 생각도 소중한 한 페이지가 돼요. 편하게 대화를 시작해보세요.</p>
+        <a href="/채팅" target="_self" class="btn-primary"
+           style="position:absolute; right:1.8rem; bottom:1.4rem;">💌 대화 시작하기</a>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">{tiles}</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_villager:
-    # 세션 이력 기반 실제 통계 (없으면 0으로 표시)
-    hist = st.session_state.get("distortion_history", [])
-    n_chat = len(hist)
-    n_reframe = len([h for h in hist if h.get("distortion") not in (None, "정상")])
-    n_days = len({h["timestamp"][:10] for h in hist}) if hist else 0
-
-    # 오늘의 활동: 이력 상위 3개 왜곡 유형 (없으면 index.tsx 기본값)
-    if hist:
-        from collections import Counter
-        top3 = Counter(h["distortion"] for h in hist).most_common(3)
-        activities = [(f"{r}st" if r == 1 else f"{r}nd" if r == 2 else f"{r}rd", name, f"{cnt}회")
-                      for r, (name, cnt) in enumerate(top3, start=1)]
-    else:
-        activities = [("1st", "따뜻한 대화", "0회"), ("2nd", "생각 재구성", "0회"), ("3rd", "감정 일기", "0회")]
-
-    tones = ["chip-sunny", "chip-coral", "chip-lilac"]
-    act_rows = "".join(
-        f"""<div style="display:flex;justify-content:space-between;align-items:center;
-                border:1px solid {P['border']};background:rgba(255,248,231,0.6);
-                border-radius:16px;padding:8px 12px;margin:6px 0;">
-              <span style="font-size:.85rem;font-weight:700;">
-                <span class="ac-chip {tones[i % 3]}">{rank}</span>&nbsp; {label}</span>
-              <span style="font-size:.75rem;color:{P['muted_fg']};">{meta}</span>
-            </div>"""
-        for i, (rank, label, meta) in enumerate(activities)
-    )
     st.markdown(f"""
-    <div class="ac-card" style="overflow:hidden;">
-      <div style="background:rgba(192,248,229,0.4); padding:1.2rem;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:54px;height:54px;border-radius:18px;background:{P['cream']};
-               display:flex;align-items:center;justify-content:center;font-size:26px;
-               box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
-          <div>
-            <div class="font-display" style="font-size:1.1rem;">여울이</div>
-            <div style="font-size:.72rem;color:{P['muted_fg']};">성격: 다정함 · 별자리: 물병자리</div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;text-align:center;">
-          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
-            <div class="font-display" style="font-size:1.1rem;">{n_chat}</div>
-            <div style="font-size:.68rem;color:{P['muted_fg']};">대화</div></div>
-          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
-            <div class="font-display" style="font-size:1.1rem;">{n_reframe}</div>
-            <div style="font-size:.68rem;color:{P['muted_fg']};">재구성</div></div>
-          <div style="background:{P['card']};border-radius:16px;padding:10px;box-shadow:0 6px 20px -6px rgba(45,143,110,0.2);">
-            <div class="font-display" style="font-size:1.1rem;">{n_days}일</div>
-            <div style="font-size:.68rem;color:{P['muted_fg']};">방문</div></div>
-        </div>
+    <div class="ac-card" style="padding:1.3rem 1.4rem;height:100%;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
+             display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
+             box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
+        <div class="font-display" style="font-size:1.05rem;">여울이</div>
       </div>
-      <div style="padding:1.1rem 1.2rem;">
-        <div class="font-display" style="color:{P['primary']};font-size:.9rem;margin-bottom:8px;">🌟 오늘의 활동</div>
+      <div style="display:flex;gap:6px;margin-top:12px;">
+        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+             border-radius:14px;padding:8px 4px;text-align:center;
+             display:flex;flex-direction:column;justify-content:center;">
+          <div class="font-display" style="font-size:1rem;">{n_chat}</div>
+          <div style="font-size:.65rem;color:{P['muted_fg']};">대화</div></div>
+        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+             border-radius:14px;padding:8px 4px;text-align:center;
+             display:flex;flex-direction:column;justify-content:center;">
+          <div class="font-display" style="font-size:1rem;">{n_reframe}</div>
+          <div style="font-size:.65rem;color:{P['muted_fg']};">재구성</div></div>
+        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+             border-radius:14px;padding:8px 4px;text-align:center;
+             display:flex;flex-direction:column;justify-content:center;">
+          <div class="font-display" style="font-size:1rem;">{n_days}일</div>
+          <div style="font-size:.65rem;color:{P['muted_fg']};">방문</div></div>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="font-display" style="color:{P['primary']};font-size:.85rem;margin-bottom:6px;">🌟 오늘의 활동</div>
         {act_rows}
       </div>
     </div>
@@ -183,16 +153,16 @@ cols = st.columns(3, gap="medium")
 for col, (url, emoji, title, desc, accent, tone) in zip(cols, menus):
     with col:
         st.markdown(f"""
-        <div class="ac-card" style="overflow:hidden;">
-          <div style="height:8px;background:{accent};"></div>
-          <div style="padding:1.4rem 1.4rem 1.3rem;">
+        <div class="ac-card" style="overflow:hidden;height:100%;display:flex;flex-direction:column;">
+          <div style="flex:0 0 8px;background:{accent};"></div>
+          <div style="padding:1.4rem 1.4rem 1.3rem;display:flex;flex-direction:column;flex:1 1 auto;">
             <div class="ac-chip {tone}" style="width:46px;height:46px;justify-content:center;
                  border-radius:16px;font-size:22px;padding:0;margin-bottom:12px;">{emoji}</div>
             <h3 style="margin:0 0 4px;font-size:1.05rem;">{emoji} {title}</h3>
             <p style="margin:0 0 10px;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
             <a href="{url}" target="_self"
                style="display:inline-block;color:{P['primary']};font-weight:800;
-                      font-size:.85rem;text-decoration:none;">시작하기 →</a>
+                      font-size:.85rem;text-decoration:none;margin-top:auto;">시작하기 →</a>
           </div>
         </div>
         """, unsafe_allow_html=True)
