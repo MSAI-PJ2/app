@@ -26,10 +26,10 @@ PALETTE = {
     "sunny":      "#F3DD8F",
     "lilac":      "#D9B8E8",
     "wood":       "#A28A6B",
-    "sidebar":         "#c0f8e5",
-    "sidebar_fg":      "#2d4f3c",
-    "sidebar_primary": "#f8e8a0",
-    "sidebar_accent":  "#9fe8d0",
+    "sidebar":         "#B4B87C",
+    "sidebar_fg":      "#3A3D22",
+    "sidebar_primary": "#E8DFA0",
+    "sidebar_accent":  "#9CA366",
     # recharts palette (analytics.tsx)
     "chart": ["#E39A86", "#D9B8E8", "#8FB4D6", "#F3DD8F", "#5bcea8", "#CBA06B", "#E0A0BE",
               "#2d8f6e", "#F2CBA8", "#B8C9A3"],
@@ -69,9 +69,14 @@ def img_b64(filename: str) -> str:
     path = os.path.join(ASSETS_DIR, filename)
     if not os.path.exists(path):
         return ""
-    ext = "png" if filename.endswith("png") else "jpeg"
+    if filename.endswith("svg"):
+        mime = "svg+xml"
+    elif filename.endswith("png"):
+        mime = "png"
+    else:
+        mime = "jpeg"
     with open(path, "rb") as f:
-        return f"data:image/{ext};base64,{base64.b64encode(f.read()).decode()}"
+        return f"data:image/{mime};base64,{base64.b64encode(f.read()).decode()}"
 
 
 # ── 전역 CSS (styles.css + app-layout.tsx 이식) ────────────────────
@@ -110,19 +115,93 @@ def apply_theme():
     }}
     .block-container {{ padding-top: 1.8rem; max-width: 1200px; }}
 
+    /* ── st.columns 같은 줄 카드끼리 높이 자동으로 맞추기 ─────────
+       Streamlit이 컬럼 안에 넣는 감싸는 div들은 기본적으로 내용물
+       높이만큼만 차지해서, 카드에 넣은 height:100%가 먹히지 않는
+       문제가 있음. 이전엔 wrapper 하나하나 이름(stVerticalBlock,
+       stElementContainer, stMarkdown...)을 짚어가며 고쳤는데, 실제로는
+       그 사이에 이름 없는 wrapper div가 하나 더 있어서 계속 끊겼음
+       (개발자도구로 실제 DOM 확인 후 발견).
+       → 이름을 일일이 쫓는 대신, 컬럼 안의 모든 div에 height:100%를
+         강제 적용해서 몇 겹이 있든 관통하도록 함. 부모(stColumn)가
+         flex stretch로 이미 "확정된 높이"를 가지므로, 그 아래 모든
+         div가 한 겹씩 100%→100%→100%로 이어져 결국 우리 카드까지 닿음.
+       ⚠️ 단, .ac-card **안쪽**(아바타 줄, 통계 칸, 활동 리스트 등)까지
+         전부 100%로 늘리면 서로 겹쳐서 레이아웃이 깨짐 — :not(.ac-card),
+         :not(.ac-card *) 로 .ac-card 경계에서 딱 멈추게 함. Streamlit
+         wrapper까지만 늘리고, 카드 내부는 원래 방식(자연스러운 내용물
+         크기)대로 그대로 둠. */
+    div[data-testid="stHorizontalBlock"] {{ align-items: stretch; }}
+    div[data-testid="stColumn"] {{ display: flex; flex-direction: column; }}
+    div[data-testid="stColumn"] div:not(.ac-card):not(.ac-card *) {{ height: 100%; }}
+
     /* Streamlit 기본 헤더(Deploy 버튼 등)가 커스텀 상단바 위에 겹쳐서
        필(pill)이 잘려 보이는 문제 방지 — 완전 커스텀 UI라 기본 헤더 불필요 */
     header[data-testid="stHeader"] {{ display: none !important; }}
     div[data-testid="stToolbar"] {{ display: none !important; }}
 
-    /* ── 사이드바: 민트 아이콘 레일 (app-layout.tsx <aside>) ── */
+    /* ── 사이드바: 올리브 아이콘 레일 (app-layout.tsx <aside>) ── */
     [data-testid="stSidebarNav"] {{ display: none; }}   /* 기본 페이지 네비 숨김 */
-    section[data-testid="stSidebar"] {{
+
+    /* 사이드바 접기/펼치기 버튼을 완전히 제거 → 클릭 자체가 불가능하게.
+       테스트id가 버전에 따라 다를 수 있어 이름이 겹치는 패턴까지 폭넓게 잡음. */
+    button[data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    [data-testid*="CollapsedControl"],
+    [data-testid*="CollapseButton"],
+    [data-testid="stSidebarCollapsedControl"] {{
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }}
+
+    /* ⚠️ 핵심 방어: 버튼을 숨겨도 Streamlit이 내부적으로 사이드바를
+       "접힘" 상태(aria-expanded="false")로 표시하면 사이드바 자체가
+       화면 밖으로 밀려나거나 width:0 이 되어 사라짐 — 그러면 되돌릴
+       버튼도 같이 사라져서 영영 못 꺼내는 상황이 생김.
+       그래서 접힘 상태 속성이 붙어도 컨테이너를 강제로 항상 펼친
+       크기/위치로 고정한다 (버튼 숨김만으로는 불충분). */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"][aria-expanded="false"] {{
         background: {p['sidebar']} !important;
         width: 150px !important;
         min-width: 150px !important;
         max-width: 150px !important;
+        transform: none !important;
+        margin-left: 0 !important;
+        visibility: visible !important;
+        position: relative !important;
     }}
+    /* 접힘 상태일 때 Streamlit이 본문 영역을 전체 폭으로 늘리지 못하게,
+       사이드바 폭만큼 항상 여백을 확보 */
+    div[data-testid="stAppViewContainer"] > section:last-child {{
+        margin-left: 0 !important;
+    }}
+
+    /* 사이드바 오른쪽 경계의 "드래그로 폭 조절" 핸들 제거.
+       ⚠️ 이 핸들은 data-testid가 아예 없는 요소라 testid 기반 선택자로는
+       못 잡음 — Streamlit 번들 JS를 직접 뜯어서 확인한 실제 클래스(eelgd2m3,
+       re-resizable 라이브러리의 핸들 컴포넌트)를 정확히 지정한다.
+       Streamlit 버전이 바뀌면 이 내부 클래스명이 달라질 수 있어, 구조적
+       선택자(사이드바 바로 아래 absolute+col-resize 요소)로 한 번 더 방어. */
+    section[data-testid="stSidebar"] .eelgd2m3,
+    section[data-testid="stSidebar"] [class*="eelgd2m3"] {{
+        display: none !important;
+        pointer-events: none !important;
+        width: 0 !important;
+    }}
+    /* 구조적 방어선: 사이드바 바로 아래, 헤더/컨텐츠가 아닌 나머지 요소는
+       전부 클릭 통과(pointer-events: none)시켜서 리사이즈 드래그 자체를
+       막는다. 텍스트/버튼이 아니라 위치 잡기용 div라 기능엔 영향 없음. */
+    section[data-testid="stSidebar"] > div:not([data-testid="stSidebarContent"]) {{
+        pointer-events: none !important;
+    }}
+    section[data-testid="stSidebar"] {{
+        resize: none !important;
+    }}
+
     section[data-testid="stSidebar"] > div:first-child {{
         padding: 1.2rem 0.7rem 1rem;
         display: flex; flex-direction: column; align-items: center;
@@ -365,6 +444,7 @@ NAV = [
     ("types",     "pages/3_생각도감.py",          "📖", "생각도감"),
     ("survey",    "pages/4_설문.py",             "📝", "설문"),
     ("history",   "pages/5_이전대화기록.py",       "🗂️", "이전 대화"),
+    ("career",    "pages/6_취업도우미.py",        "🌱", "취업 준비"),
 ]
 
 
@@ -388,17 +468,7 @@ def render_sidebar(active: str = "home"):
 def render_topbar(show_new_chat: bool = True):
     """show_new_chat=False로 호출하면 우측 '새 대화' 버튼을 숨김
     (홈처럼 이미 자체 CTA가 있는 페이지에서 중복을 피하기 위함)"""
-    now = datetime.now()
-    ampm = "오전" if now.hour < 12 else "오후"
-    h = now.hour % 12 or 12
     col_pill, col_spacer, col_btn = st.columns([3, 3, 1])
-    with col_pill:
-        st.markdown(f"""
-<div class="topbar" style="border-bottom:none;margin-bottom:0;">
-    <span class="pill">☀️ <span class="font-display">마음숲 마을</span> <small>· {ampm} {h}:{now.minute:02d}</small></span>
-    <span class="pill">🍃 <b>여울 마을</b> <small>· 오늘도 화창해요</small></span>
-</div>
-""", unsafe_allow_html=True)
     with col_btn:
         if show_new_chat:
             st.markdown(
