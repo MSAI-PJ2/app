@@ -8,12 +8,15 @@ import streamlit as st
 
 from api_client import explain_turn, get_session
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent
 
 st.set_page_config(page_title="마음 일기 · 마음숲", page_icon="📊", layout="wide")
 apply_theme()
 render_sidebar(active="analytics")
 render_topbar()
+
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 분석 대시보드를 이용할 수 없음
+require_consent()
 
 CHART = P["chart"]
 GRID_COLOR = P["border"]
@@ -69,8 +72,8 @@ if admin_view:
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-    # (3) 설문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
-    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 설문 응답 (진료·상담 이력)</div>',
+    # (3) 사전 질문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
+    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 사전 질문 응답 (진료·상담 이력)</div>',
                unsafe_allow_html=True)
     survey_answers = [
         ("기존 상담 경험", "있음"),
