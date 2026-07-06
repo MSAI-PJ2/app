@@ -38,17 +38,20 @@ require_consent()
 # 존재하는 .pipeline-step 을 :has() 앵커로 써서 정확히 그 컬럼만 잡는다.
 st.markdown("""
 <style>
+/* 1) flex-start로 컬럼이 끝까지 늘어나지 않고 sticky가 작동할 공간 확보 */
 div[data-testid="stHorizontalBlock"]:has(.pipeline-step) { align-items: flex-start !important; }
-div[data-testid="stColumn"]:has(.pipeline-step) {
-    position: sticky;
-    top: 0.8rem;
-    align-self: flex-start;
-    max-height: calc(100vh - 1.6rem);
-    overflow-y: auto;          /* 패널 자체가 화면보다 길 때만 내부 스크롤 */
-    scrollbar-width: none;      /* 내부 스크롤바는 숨겨서 깔끔하게 */
-}
-div[data-testid="stColumn"]:has(.pipeline-step)::-webkit-scrollbar { display: none; }
+
+/* 2) 컨테이너 높이 계산 정상화를 위해 auto로 설정 */
 div[data-testid="stColumn"]:has(.pipeline-step) div { height: auto !important; }
+
+/* 3) 오른쪽 컬럼을 화면에 고정하는 핵심 코드 */
+div[data-testid="stColumn"]:has(.pipeline-step) {
+    position: -webkit-sticky !important; /* Safari 호환성 */
+    position: sticky !important;
+    top: 5rem !important; /* 상단 메뉴(Top bar) 높이에 맞춰 조절 (예: 80px, 4rem 등) */
+    z-index: 100; /* 다른 요소에 가려지지 않도록 설정 */
+    transition: top 0.3s ease; /* 부드러운 전환 효과 */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -283,7 +286,7 @@ with col_chat:
 # ═══════════ 사이드 패널 (chat.tsx aside) ═══════════
 with col_side:
     # 처리 단계 패널 (항상 노출 — 심사/시연 시 내부 동작을 투명하게 보여주는 쪽으로 팀 확정)
-    st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:1rem;">
+    st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:0.45rem;">
     <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
     pipeline_placeholder = st.empty()
     pipeline_placeholder.markdown("""
@@ -296,7 +299,8 @@ with col_side:
     st.markdown('<div class="font-display" style="margin:8px 0 4px;">🏷️ 감지된 왜곡 유형</div>', unsafe_allow_html=True)
     distortion_placeholder = st.empty()
     distortion_placeholder.caption("입력 후 결과가 표시됩니다")
-    st.divider()
+    st.markdown(f'<hr style="margin:.5rem 0;border:none;border-top:1px solid {P["border"]};">',
+               unsafe_allow_html=True)
 
     # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
     # '불충분'은 인지왜곡이 아니라 라우팅 라벨이므로 이 통계에서 제외한다.
@@ -317,7 +321,7 @@ with col_side:
         for i, (name, pct) in enumerate(rows)
     )
     st.markdown(f"""
-<div class="ac-card" style="padding:1.3rem;margin-bottom:1rem;">
+<div class="ac-card" style="padding:1.3rem;margin-bottom:0.45rem;">
   <div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>
   {bars}
   {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not hist else ''}
@@ -328,7 +332,7 @@ with col_side:
                 ("응급·소방", "119"), ("경찰", "112")]
     lines = "".join(
         f"""<div style="display:flex;justify-content:space-between;align-items:center;
-             padding:10px 16px;border-top:1px solid {P['border']};font-size:.85rem;">
+             padding:7px 16px;border-top:1px solid {P['border']};font-size:.85rem;">
              <span>{n}</span><a href="tel:{t}" class="font-display"
              style="color:{P['primary']};text-decoration:none;">{t}</a></div>"""
         for n, t in hotlines
