@@ -1,0 +1,145 @@
+<svg viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EAF7EE"/>
+      <stop offset="60%" stop-color="#FDF6E3"/>
+      <stop offset="100%" stop-color="#FFF3D6"/>
+    </linearGradient>
+    <linearGradient id="woodGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C9A574"/>
+      <stop offset="100%" stop-color="#A2794F"/>
+    </linearGradient>
+    <linearGradient id="postGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#B98A5C"/>
+      <stop offset="100%" stop-color="#8F6A45"/>
+    </linearGradient>
+    <linearGradient id="glassGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFF3C4"/>
+      <stop offset="100%" stop-color="#FBE39A"/>
+    </linearGradient>
+    <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F3DD8F"/>
+      <stop offset="100%" stop-color="#E8C878"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#8F6A45" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#wallGrad)"/>
+
+  <rect x="0" y="560" width="1280" height="80" fill="url(#floorGrad)"/>
+  <rect x="0" y="560" width="1280" height="6" fill="#D9B36B" opacity="0.6"/>
+
+  <circle cx="1150" cy="90" r="8" fill="#c0f8e5" opacity="0.55"/>
+  <circle cx="60" cy="120" r="6" fill="#D9B8E8" opacity="0.5"/>
+  <circle cx="1200" cy="330" r="6" fill="#F3DD8F" opacity="0.5"/>
+  <circle cx="1080" cy="600" r="7" fill="#E39A86" opacity="0.4"/>
+
+  <!-- ═════ BOOKSHELF ═════ -->
+  <g filter="url(#soft)">
+    <rect x="70" y="120" width="780" height="470" rx="18" fill="url(#woodGrad)"/>
+    <rect x="94" y="150" width="732" height="380" rx="10" fill="#7A5A38"/>
+
+    <path d="M 110 150 C 110 90 300 90 300 150 Z" fill="#F3DD8F" opacity="0.9"/>
+    <path d="M 420 150 C 420 90 610 90 610 150 Z" fill="#c0f8e5" opacity="0.9"/>
+
+    <rect x="392" y="120" width="36" height="470" rx="10" fill="url(#postGrad)"/>
+    <ellipse cx="410" cy="150" rx="26" ry="10" fill="#B98A5C"/>
+
+    <rect x="94" y="240" width="732" height="14" fill="url(#woodGrad)"/>
+    <rect x="94" y="360" width="732" height="14" fill="url(#woodGrad)"/>
+    <rect x="94" y="480" width="732" height="14" fill="url(#woodGrad)"/>
+
+    <g>
+      <rect x="108" y="164" width="30" height="76" rx="6" fill="#E39A86"/>
+      <rect x="142" y="156" width="26" height="84" rx="6" fill="#c0f8e5"/>
+      <rect x="172" y="170" width="30" height="70" rx="6" fill="#F3DD8F"/>
+      <rect x="206" y="160" width="24" height="80" rx="6" fill="#D9B8E8"/>
+      <rect x="234" y="168" width="30" height="72" rx="6" fill="#8FBFA8"/>
+      <rect x="268" y="158" width="26" height="82" rx="6" fill="#E39A86"/>
+
+      <rect x="438" y="162" width="28" height="78" rx="6" fill="#F3DD8F"/>
+      <rect x="470" y="170" width="24" height="70" rx="6" fill="#c0f8e5"/>
+      <rect x="498" y="158" width="30" height="82" rx="6" fill="#D9B8E8"/>
+      <rect x="532" y="166" width="26" height="74" rx="6" fill="#E39A86"/>
+      <rect x="562" y="156" width="28" height="84" rx="6" fill="#8FBFA8"/>
+    </g>
+
+    <g>
+      <rect x="108" y="272" width="30" height="88" rx="6" fill="#D9B8E8"/>
+      <rect x="142" y="264" width="26" height="96" rx="6" fill="#E39A86"/>
+      <rect x="172" y="278" width="30" height="82" rx="6" fill="#c0f8e5"/>
+      <g transform="rotate(-9 232 320)">
+        <rect x="212" y="270" width="28" height="90" rx="6" fill="#F3DD8F"/>
+      </g>
+      <rect x="252" y="266" width="26" height="94" rx="6" fill="#8FBFA8"/>
+
+      <rect x="438" y="270" width="70" height="18" rx="5" fill="#FFFEF9" stroke="#E6DBBF" stroke-width="2"/>
+      <rect x="438" y="286" width="70" height="18" rx="5" fill="#FBF3DE" stroke="#E6DBBF" stroke-width="2"/>
+      <rect x="522" y="264" width="26" height="96" rx="6" fill="#c0f8e5"/>
+      <g transform="rotate(8 570 316)">
+        <rect x="556" y="268" width="28" height="92" rx="6" fill="#8FBFA8"/>
+      </g>
+      <rect x="596" y="272" width="30" height="88" rx="6" fill="#E39A86"/>
+      <rect x="630" y="262" width="26" height="98" rx="6" fill="#F3DD8F"/>
+    </g>
+
+    <g>
+      <rect x="108" y="392" width="30" height="88" rx="6" fill="#8FBFA8"/>
+      <rect x="142" y="384" width="26" height="96" rx="6" fill="#F3DD8F"/>
+      <rect x="172" y="396" width="30" height="84" rx="6" fill="#E39A86"/>
+      <rect x="206" y="386" width="24" height="94" rx="6" fill="#c0f8e5"/>
+      <rect x="234" y="392" width="30" height="88" rx="6" fill="#D9B8E8"/>
+
+      <g transform="rotate(-7 456 430)">
+        <rect x="440" y="390" width="28" height="90" rx="6" fill="#E39A86"/>
+      </g>
+      <rect x="472" y="382" width="26" height="98" rx="6" fill="#c0f8e5"/>
+      <rect x="502" y="394" width="30" height="86" rx="6" fill="#F3DD8F"/>
+      <rect x="536" y="384" width="24" height="96" rx="6" fill="#8FBFA8"/>
+      <rect x="564" y="390" width="30" height="90" rx="6" fill="#D9B8E8"/>
+      <rect x="598" y="380" width="26" height="100" rx="6" fill="#E39A86"/>
+    </g>
+
+    <rect x="94" y="504" width="732" height="70" rx="8" fill="#8F6A45"/>
+    <rect x="118" y="518" width="150" height="42" rx="6" fill="#A2794F"/>
+    <rect x="288" y="518" width="150" height="42" rx="6" fill="#A2794F"/>
+    <rect x="458" y="518" width="150" height="42" rx="6" fill="#A2794F"/>
+    <rect x="628" y="518" width="150" height="42" rx="6" fill="#A2794F"/>
+  </g>
+
+  <!-- ladder leaning against the shelf -->
+  <g filter="url(#soft)" transform="rotate(-11 210 590)">
+    <rect x="150" y="230" width="14" height="360" rx="6" fill="#D9B48F"/>
+    <rect x="230" y="230" width="14" height="360" rx="6" fill="#D9B48F"/>
+    <rect x="150" y="270" width="94" height="12" rx="4" fill="#C39A6B"/>
+    <rect x="150" y="330" width="94" height="12" rx="4" fill="#C39A6B"/>
+    <rect x="150" y="390" width="94" height="12" rx="4" fill="#C39A6B"/>
+    <rect x="150" y="450" width="94" height="12" rx="4" fill="#C39A6B"/>
+    <rect x="150" y="510" width="94" height="12" rx="4" fill="#C39A6B"/>
+  </g>
+
+  <!-- ═════ ARCHED WINDOW ═════ -->
+  <g filter="url(#soft)">
+    <path d="M 900 560 L 900 260 C 900 170 980 120 1060 120 C 1140 120 1220 170 1220 260 L 1220 560 Z"
+          fill="#B98A5C"/>
+    <path d="M 916 560 L 916 262 C 916 182 984 138 1060 138 C 1136 138 1204 182 1204 262 L 1204 560 Z"
+          fill="url(#glassGrad)"/>
+    <rect x="1054" y="138" width="12" height="422" fill="#B98A5C"/>
+    <rect x="916" y="298" width="288" height="12" fill="#B98A5C"/>
+    <rect x="916" y="430" width="288" height="12" fill="#B98A5C"/>
+    <path d="M 916 262 C 916 182 984 138 1060 138 C 1136 138 1204 182 1204 262"
+          fill="none" stroke="#B98A5C" stroke-width="12"/>
+    <polygon points="960,150 1010,150 900,560 850,560" fill="#FFFDF2" opacity="0.35"/>
+    <polygon points="1060,140 1110,140 1040,560 990,560" fill="#FFFDF2" opacity="0.28"/>
+  </g>
+
+  <!-- small potted leaf accent -->
+  <g transform="translate(830,545)">
+    <rect x="-22" y="18" width="44" height="34" rx="8" fill="#E39A86"/>
+    <path d="M0 -6 C 22 -14 38 6 30 30 C 24 50 -4 50 -12 30 C -20 12 -18 0 0 -6 Z"
+          fill="#c0f8e5" stroke="#2d8f6e" stroke-width="2"/>
+    <path d="M0 -4 C 8 8 12 20 4 40" stroke="#2d8f6e" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
