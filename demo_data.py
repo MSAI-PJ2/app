@@ -3,8 +3,16 @@
 실제 라벨링(라벨 진짜), 세션 볼륨·날짜만 합성. 데모 id 로 대시보드를 열면 df_all 로 주입돼
 기간필터·분포·추이가 실집계처럼 동작. (라이브 Cosmos 파이프라인 아님 — 시연 픽스처)"""
 
+import hashlib
+
 DEMO_USER_ID = "demo-마음숲"
 DEMO_SESSION_COUNT = 20
+
+# 데모 id 트리거(로그인): 이 이메일로 로그인하면 0_로그인.py 가 st.session_state.user_id 를
+# virtual_user_id(email)=sha256[:32] 로 저장한다. 대시보드가 그 uid 를 감지해 데모 통계를
+# 자동 표시한다. (데모 세션 레코드 시더와 동일 이메일 — 계정 일관성)
+DEMO_LOGIN_EMAIL = "demo@maeumsup.kr"
+DEMO_LOGIN_UID = hashlib.sha256(DEMO_LOGIN_EMAIL.strip().lower().encode("utf-8")).hexdigest()[:32]
 
 # load_session_turns() 반환과 같은 행 형태 + session_name. distortion=selected 라벨 단위(동시 왜곡=여러 행).
 DEMO_ROWS = [

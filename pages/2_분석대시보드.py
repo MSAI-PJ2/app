@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from api_client import explain_turn, get_session
-from demo_data import DEMO_USER_ID, demo_stats_rows
+from demo_data import DEMO_USER_ID, DEMO_LOGIN_UID, demo_stats_rows
 from ui_theme import PALETTE as P
 from ui_theme import apply_theme, render_sidebar, render_topbar
 
@@ -94,10 +94,12 @@ with st.expander("🔎 조회할 세션 ID", expanded=False):
         help="비워두면 현재 대화 세션(방금 대화하기에서 쓰던 session_id)을 사용합니다.")
 session_id = (session_id_input or default_session or "").strip()
 
-# [데모] 특정 데모 id 를 조회하거나 관리자 토글이면, 그 사용자의 세션들을 가로지른 집계 통계를
-# 프론트 내장 픽스처(실라벨·합성날짜)로 보여준다 — "데모 id 로 대시보드 사용 시 UI 반영".
-# 발화는 배포 분류기로 실제 라벨링했고 세션 볼륨·날짜만 합성 — 라이브 Cosmos 파이프라인은 아님.
-is_demo = admin_view or session_id == DEMO_USER_ID
+# [데모 id 트리거] ① 데모 이메일로 로그인(user_id==DEMO_LOGIN_UID) ② 관리자 토글
+# ③ 조회 세션 ID 에 DEMO_USER_ID 입력 — 셋 중 하나면 그 사용자의 세션들을 가로지른 집계
+# 통계를 프론트 내장 픽스처(실라벨·합성날짜)로 보여준다. 발화는 배포 분류기로 실제 라벨링했고
+# 세션 볼륨·날짜만 합성 — 라이브 Cosmos 파이프라인은 아님.
+is_demo = (admin_view or session_id == DEMO_USER_ID
+           or st.session_state.get("user_id") == DEMO_LOGIN_UID)
 if is_demo:
     history = demo_stats_rows()
     using_sample = False
