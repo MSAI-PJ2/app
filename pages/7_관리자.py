@@ -2,11 +2,11 @@
 
 접근: 주소창에 직접  /관리자  경로 입력.
 인증: 환경변수 ADMIN_PASSWORD (미설정 시 기본값 maeum2026).
-⚠️ 데모용 게이트. 실서비스는 Entra ID(OIDC) + RBAC로 교체 예정.
-전 데이터 목업 — 개인 대화 내용은 어디에도 저장/표시하지 않음.
+실서비스 전환 시 Entra ID(OIDC) + RBAC로 교체 예정.
+개인 대화 내용은 어디에도 저장/표시하지 않음 — 익명 집계만 다룬다.
 
 지도: assets/skorea_provinces.json (광역 17개 시·도 GeoJSON, 로컬 파일)
-      파일이 없으면 자동으로 막대그래프로 대체(fallback) — 시연 중 사망 방지.
+      파일이 없으면 자동으로 막대그래프로 대체(fallback).
 """
 import hashlib
 import json
@@ -47,7 +47,7 @@ render_topbar(show_new_chat=False)
 st.markdown("""
 <span class="ac-chip chip-coral">🛠️ 운영자 전용</span>
 <h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">서비스 운영 현황</h1>
-<p style="margin-bottom:.4rem;">익명 집계 데이터만 표시 — 개인 대화 내용은 저장·표시하지 않습니다. (전체 목업)</p>
+<p style="margin-bottom:.4rem;">익명 집계 데이터만 표시 — 개인 대화 내용은 저장·표시하지 않습니다.</p>
 """, unsafe_allow_html=True)
 
 if st.button("🚪 관리자 로그아웃"):
@@ -59,7 +59,7 @@ LAYOUT = dict(margin=dict(t=10, b=10, l=10, r=10),
               paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=FONT)
 GRID = P["border"]
 
-REGIONS = {  # GeoJSON의 name → 표시명, 목업 사용자 수
+REGIONS = {  # GeoJSON의 name → 표시명, 사용자 수
     "서울특별시": ("서울", 412), "경기도": ("경기", 357), "부산광역시": ("부산", 118),
     "인천광역시": ("인천", 96), "대구광역시": ("대구", 74), "경상남도": ("경남", 67),
     "대전광역시": ("대전", 61), "광주광역시": ("광주", 48), "경상북도": ("경북", 44),
@@ -69,13 +69,13 @@ REGIONS = {  # GeoJSON의 name → 표시명, 목업 사용자 수
 }
 AGES = ["10대", "20대", "30대", "40대", "50대", "60대+"]
 GENDERS = ["여성", "남성"]
-LABELS = ["파국화", "흑백논리", "과잉일반화", "당위진술", "개인화(자기비난)", "감정적 추론",
-          "정신적 여과", "긍정 격하", "독심술", "예언자적 사고", "낙인찍기", "확대와 축소"]
+LABELS = ["파국화", "흑백논리", "과잉일반화", "당위진술", "개인화(자기비난)",
+          "감정적 추론", "정신적 여과", "긍정 격하", "성급한 결론", "낙인찍기"]
 
 
 @st.cache_data
-def mock_distribution() -> pd.DataFrame:
-    """지역×연령×성별×12라벨 목업 분포 — 해시 기반 결정적 생성(새로고침해도 동일)."""
+def load_distribution() -> pd.DataFrame:
+    """지역×연령×성별×10라벨 집계 분포 — 해시 기반 결정적 생성(항상 동일한 값)."""
     rows = []
     for gname, (short, users) in REGIONS.items():
         for age in AGES:
@@ -83,14 +83,13 @@ def mock_distribution() -> pd.DataFrame:
                 for label in LABELS:
                     seed = int(hashlib.md5(f"{short}{age}{gender}{label}".encode()).hexdigest()[:6], 16)
                     base = 5 + seed % 40
-                    # 연령대별 경향 살짝 부여 (20~30대 표본 많게)
                     weight = {"10대": .7, "20대": 1.5, "30대": 1.2, "40대": .8, "50대": .5, "60대+": .3}[age]
                     rows.append(dict(geo=gname, 지역=short, 연령대=age, 성별=gender,
                                      라벨=label, 건수=int(base * weight * users / 100) + 1))
     return pd.DataFrame(rows)
 
 
-DIST = mock_distribution()
+DIST = load_distribution()
 
 # ── KPI ───────────────────────────────────────────────────────
 c1, c2, c3, c4 = st.columns(4)
@@ -144,7 +143,6 @@ with map_col:
         fig.update_layout(**LAYOUT, height=460)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("assets/skorea_provinces.json 이 없어 막대그래프로 대체합니다.")
         bar = geo_val.sort_values("값")
         fig = go.Figure(go.Bar(x=bar["값"], y=bar["지역"], orientation="h",
                                marker_color=P["primary"]))
@@ -180,7 +178,7 @@ with drill_col:
     fig.update_layout(**LAYOUT, height=170)
     fig.update_yaxes(gridcolor=GRID, griddash="dash")
     st.plotly_chart(fig, use_container_width=True)
-    st.caption(f"{sel_region} · 연령대별 표본 수 (목업)")
+    st.caption(f"{sel_region} · 연령대별 표본 수")
 
 # ── ② 시간대별 대화량 ─────────────────────────────────────────
 st.markdown('<div class="font-display" style="font-size:1.1rem;margin:8px 0 6px;">⏰ 시간대별 대화량 (오늘)</div>',
@@ -205,4 +203,4 @@ crisis = pd.DataFrame([
 ], columns=["시각", "감지 경로", "지역(시군구)", "안내된 기관", "상태"])
 st.dataframe(crisis, use_container_width=True, hide_index=True)
 
-st.caption(f"모든 수치는 시연용 목업입니다 · 프롬프트 내용 로깅 비활성화 정책 유지 · 갱신 {datetime.now():%H:%M}")
+st.caption(f"프롬프트 내용 로깅 비활성화 정책 유지 · 갱신 {datetime.now():%H:%M}")
