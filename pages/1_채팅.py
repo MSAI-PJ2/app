@@ -39,17 +39,20 @@ require_consent()
 # 존재하는 .pipeline-step 을 :has() 앵커로 써서 정확히 그 컬럼만 잡는다.
 st.markdown("""
 <style>
+/* 1) flex-start로 컬럼이 끝까지 늘어나지 않고 sticky가 작동할 공간 확보 */
 div[data-testid="stHorizontalBlock"]:has(.pipeline-step) { align-items: flex-start !important; }
-div[data-testid="stColumn"]:has(.pipeline-step) {
-    position: sticky;
-    top: 0.8rem;
-    align-self: flex-start;
-    max-height: calc(100vh - 1.6rem);
-    overflow-y: auto;          /* 패널 자체가 화면보다 길 때만 내부 스크롤 */
-    scrollbar-width: none;      /* 내부 스크롤바는 숨겨서 깔끔하게 */
-}
-div[data-testid="stColumn"]:has(.pipeline-step)::-webkit-scrollbar { display: none; }
+
+/* 2) 컨테이너 높이 계산 정상화를 위해 auto로 설정 */
 div[data-testid="stColumn"]:has(.pipeline-step) div { height: auto !important; }
+
+/* 3) 오른쪽 컬럼을 화면에 고정하는 핵심 코드 */
+div[data-testid="stColumn"]:has(.pipeline-step) {
+    position: -webkit-sticky !important; /* Safari 호환성 */
+    position: sticky !important;
+    top: 5rem !important; /* 상단 메뉴(Top bar) 높이에 맞춰 조절 (예: 80px, 4rem 등) */
+    z-index: 100; /* 다른 요소에 가려지지 않도록 설정 */
+    transition: top 0.3s ease; /* 부드러운 전환 효과 */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -136,7 +139,7 @@ with col_chat:
          display:flex;align-items:center;justify-content:center;font-size:20px;
          box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🍃</div>
     <div>
-      <div class="font-display" style="font-size:.95rem;">여울이 · 마음숲 친구</div>
+      <div class="font-display" style="font-size:.95rem;">말랑이 · 마음숲 친구</div>
       <div style="font-size:.72rem;color:{P['muted_fg']};">
         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
               background:{P['leaf_deep']};vertical-align:middle;"></span>
@@ -194,16 +197,6 @@ with col_chat:
                 st.caption(time_str)
 
         st.markdown('<div class="chat-footer-divider"></div>', unsafe_allow_html=True)
-
-        # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
-        # (이제 chat_card 컨테이너 안에 실제로 위치하므로 카드 밖으로 나오지 않음)
-        quick = ["🌱 오늘 있었던 일", "🌧️ 속상한 마음", "🌟 다시 생각해보기", "🌸 감사한 순간"]
-        qcols = st.columns(len(quick))
-        for qc, q in zip(qcols, quick):
-            with qc:
-                if st.button(q, key=f"quick_{q}", use_container_width=True):
-                    st.session_state.queued_input = q[2:].strip() + "에 대해 이야기하고 싶어요"
-                    st.rerun()
 
         # ── 위기 감지 후 위치 입력 대기 (GPS + selectbox 폴백) ──
         # crisis-card 도 같은 이유로 st.container(key="crisis_card")로 교체.
@@ -265,7 +258,7 @@ with col_chat:
         audio_value = None
         image_value = None
         if input_mode == "✍️ 텍스트":
-            user_input = st.chat_input("여울이에게 편지를 써보세요…")
+            user_input = st.chat_input("말랑이에게 편지를 써보세요…")
         elif input_mode == "🎙️ 음성":
             audio_value = st.audio_input("마이크로 말해보세요", key=f"audio_input_{st.session_state.input_widget_seq}")
         elif input_mode == "🖼️ 카톡 캡쳐":
@@ -288,7 +281,7 @@ with col_chat:
 # ═══════════ 사이드 패널 (chat.tsx aside) ═══════════
 with col_side:
     # 처리 단계 패널 (항상 노출 — 심사/시연 시 내부 동작을 투명하게 보여주는 쪽으로 팀 확정)
-    st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:1rem;">
+    st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:0.45rem;">
     <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
     pipeline_placeholder = st.empty()
     pipeline_placeholder.markdown("""
@@ -301,7 +294,8 @@ with col_side:
     st.markdown('<div class="font-display" style="margin:8px 0 4px;">🏷️ 감지된 왜곡 유형</div>', unsafe_allow_html=True)
     distortion_placeholder = st.empty()
     distortion_placeholder.caption("입력 후 결과가 표시됩니다")
-    st.divider()
+    st.markdown(f'<hr style="margin:.5rem 0;border:none;border-top:1px solid {P["border"]};">',
+               unsafe_allow_html=True)
 
     # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
     # '불충분'은 인지왜곡이 아니라 라우팅 라벨이므로 이 통계에서 제외한다.
@@ -322,7 +316,7 @@ with col_side:
         for i, (name, pct) in enumerate(rows)
     )
     st.markdown(f"""
-<div class="ac-card" style="padding:1.3rem;margin-bottom:1rem;">
+<div class="ac-card" style="padding:1.3rem;margin-bottom:0.45rem;">
   <div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>
   {bars}
   {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not hist else ''}
@@ -333,7 +327,7 @@ with col_side:
                 ("응급·소방", "119"), ("경찰", "112")]
     lines = "".join(
         f"""<div style="display:flex;justify-content:space-between;align-items:center;
-             padding:10px 16px;border-top:1px solid {P['border']};font-size:.85rem;">
+             padding:7px 16px;border-top:1px solid {P['border']};font-size:.85rem;">
              <span>{n}</span><a href="tel:{t}" class="font-display"
              style="color:{P['primary']};text-decoration:none;">{t}</a></div>"""
         for n, t in hotlines
@@ -388,7 +382,7 @@ if user_input:
     # 순서: progress(input) -> progress(analyze) -> meta -> chunks -> progress(route)
     #       -> token... -> progress(generate) -> [progress(speak)] -> done
     try:
-        with st.spinner("여울이가 편지를 쓰는 중…"):
+        with st.spinner("말랑이가 편지를 쓰는 중…"):
             for event in respond_stream(st.session_state.session_id, user_input):
                 etype = event.get("type")
 
