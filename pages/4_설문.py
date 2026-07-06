@@ -4,7 +4,7 @@ from api_client import submit_survey
 from ui_theme import PALETTE as P
 from ui_theme import apply_theme, render_sidebar, render_topbar, resolve_page
 
-st.set_page_config(page_title="설문 · 마음숲", page_icon="📝", layout="wide")
+st.set_page_config(page_title="사전 질문 · 마음숲", page_icon="📝", layout="wide")
 apply_theme()
 render_sidebar(active="survey")
 render_topbar()
@@ -16,10 +16,11 @@ if not st.session_state.get("is_logged_in"):
     st.stop()
 
 st.markdown(f"""
-<span class="ac-chip chip-lilac">📝 사전 설문</span>
+<span class="ac-chip chip-lilac">📝 사전 질문</span>
 <h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">조금 더 알려주실래요?</h1>
 <p style="margin:0 0 1.4rem;font-size:.87rem;color:{P['muted_fg']};">
-답변하시면 상황에 더 맞는 안내를 드릴 수 있어요. 원치 않는 항목은 비워두셔도 됩니다.</p>
+답변하시면 상황에 더 맞는 안내를 드릴 수 있어요. 아래 필수 동의 항목만 체크하면
+나머지 항목은 비워두셔도 서비스를 이용할 수 있어요.</p>
 """, unsafe_allow_html=True)
 
 SIDO_LIST = [
@@ -104,7 +105,9 @@ if st.button("💾 저장하기", type="primary"):
     try:
         saved = submit_survey(payload)
         st.session_state.user_profile = saved
-        st.success("프로필이 저장되었습니다.")
+        st.success("프로필이 저장되었습니다. 이제 채팅과 마음 일기 등 모든 서비스를 이용할 수 있어요.")
         st.balloons()
+        if st.button("💬 대화하러 가기", key="survey_go_chat_btn"):
+            st.switch_page(resolve_page("pages/1_채팅.py"))
     except Exception as e:
         st.error(f"저장 실패: {e}")

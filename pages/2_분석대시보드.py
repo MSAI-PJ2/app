@@ -8,24 +8,28 @@ import streamlit as st
 
 from api_client import explain_turn, get_session
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent
 
 st.set_page_config(page_title="마음 일기 · 마음숲", page_icon="📊", layout="wide")
 apply_theme()
 render_sidebar(active="analytics")
 render_topbar()
 
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 분석 대시보드를 이용할 수 없음
+require_consent()
+
 CHART = P["chart"]
 GRID_COLOR = P["border"]
 FONT = dict(family="Nunito, sans-serif", color=P["muted_fg"], size=12)
 
-# ── 기관 관리자 보기 (토글) — 예시 환자 1명 기준, 전부 목업 데이터 ──
+# ── 기관 보고서 보기 (토글) — 예시 환자 1명 기준, 전부 목업 데이터 ──
+# ⚠️ "관리자"라는 표현은 쓰지 않기로 결정 (유관기관에 가져가는 문서이므로 "보고서"로 통일)
 # st.stop()으로 여기서 끝내기 때문에 아래 개인용 코드는 전혀 안 건드려도 된다.
-admin_view = st.toggle("🏥 기관 관리자로 보기 (환자)", key="admin_view_toggle")
+admin_view = st.toggle("🏥 기관 제출용 보고서 보기 (환자)", key="report_view_toggle")
 if admin_view:
     st.markdown(f"""
-<span class="ac-chip chip-sky">🏥 기관 관리자용</span>
-<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록</h1>
+<span class="ac-chip chip-sky">🏥 기관 제출용 보고서</span>
+<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록 보고서</h1>
 """, unsafe_allow_html=True)
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -68,8 +72,8 @@ if admin_view:
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-    # (3) 설문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
-    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 설문 응답 (진료·상담 이력)</div>',
+    # (3) 사전 질문 응답 그대로 — 비율/통계가 아니라 실제 응답 형식으로
+    st.markdown('<div class="font-display" style="font-size:1.1rem;margin-bottom:10px;">🏥 사전 질문 응답 (진료·상담 이력)</div>',
                unsafe_allow_html=True)
     survey_answers = [
         ("기존 상담 경험", "있음"),

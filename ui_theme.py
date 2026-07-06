@@ -130,10 +130,21 @@ def apply_theme():
          전부 100%로 늘리면 서로 겹쳐서 레이아웃이 깨짐 — :not(.ac-card),
          :not(.ac-card *) 로 .ac-card 경계에서 딱 멈추게 함. Streamlit
          wrapper까지만 늘리고, 카드 내부는 원래 방식(자연스러운 내용물
-         크기)대로 그대로 둠. */
-    div[data-testid="stHorizontalBlock"] {{ align-items: stretch; }}
-    div[data-testid="stColumn"] {{ display: flex; flex-direction: column; }}
-    div[data-testid="stColumn"] div:not(.ac-card):not(.ac-card *) {{ height: 100%; }}
+         크기)대로 그대로 둠.
+       ⚠️⚠️ 버그 수정(2026-07-06): 이 규칙이 `div[data-testid="stColumn"]`
+         전체(앱 전역)에 걸려 있어서, 홈 화면 말고 다른 페이지의 st.columns()
+         에도 전부 적용되고 있었다 — 특히 1_채팅.py의 col_side(처리 단계 /
+         감지된 왜곡 유형)처럼 .ac-card가 아닌 요소가 나란히 있는 컬럼에서는
+         전부 height:100%로 강제되어 텍스트가 서로 겹쳐 보이는 버그를 냈다.
+         → st.container(key="home_hero_row")/st.container(key="home_menu_row")
+         로 홈 화면의 두 카드 묶음만 감싸고, 이 CSS를 그 두 컨테이너
+         (.st-key-home_hero_row, .st-key-home_menu_row) 안으로만 좁힌다. */
+    .st-key-home_hero_row div[data-testid="stHorizontalBlock"],
+    .st-key-home_menu_row div[data-testid="stHorizontalBlock"] {{ align-items: stretch; }}
+    .st-key-home_hero_row div[data-testid="stColumn"],
+    .st-key-home_menu_row div[data-testid="stColumn"] {{ display: flex; flex-direction: column; }}
+    .st-key-home_hero_row div[data-testid="stColumn"] div:not(.ac-card):not(.ac-card *),
+    .st-key-home_menu_row div[data-testid="stColumn"] div:not(.ac-card):not(.ac-card *) {{ height: 100%; }}
 
     /* Streamlit 기본 헤더(Deploy 버튼 등)가 커스텀 상단바 위에 겹쳐서
        필(pill)이 잘려 보이는 문제 방지 — 완전 커스텀 UI라 기본 헤더 불필요 */
@@ -309,22 +320,34 @@ def apply_theme():
     }}
 
     /* ── 채팅 요소 (routes/chat.tsx) ────────────────────────── */
+    /* ⚠️ 구조 변경(2026-07-06): 예전엔 chat-header/chat-body/chat-footer 를
+       각각 별개의 st.markdown() 호출로 열고-닫았는데, Streamlit은 st.markdown()
+       호출마다 독립된 DOM 컨테이너를 만들기 때문에 열린 <div>가 그 호출 하나의
+       컨테이너 안에서만 닫히고, 그 사이에 낀 실제 위젯(st.button, st.chat_input,
+       st.radio 등)은 카드 바깥의 형제 요소로 렌더링됨 — 카드가 빈 박스로 보이고
+       입력창/버튼이 카드 밖으로 떨어져 나오는 "무너진 UI" 버그의 원인이었음.
+       → st.container(key="chat_card") 로 전체를 감싸 실제 DOM 하나로 묶고,
+       이 CSS는 그 컨테이너(.st-key-chat_card)에 카드 스타일을 입힌다.
+       header 배너만 카드 안쪽에서 한 번의 st.markdown() 호출로 완결되는
+       (열고 그 자리에서 바로 닫는) 배너 div로 처리 — 이건 안전함. */
+    .st-key-chat_card {{
+        background: rgba(255,248,231,0.55);
+        border: 1px solid {p['border']};
+        border-radius: 28px;
+        box-shadow: 0 6px 20px -6px rgba(45,143,110,0.25);
+        overflow: hidden;
+        padding: 0 20px 16px !important;
+    }}
     .chat-header {{
         display: flex; align-items: center; justify-content: space-between;
         background: rgba(192,248,229,0.35);
-        border: 1px solid {p['border']}; border-bottom: none;
-        border-radius: 28px 28px 0 0; padding: 12px 20px;
+        margin: 0 -20px 14px;
+        padding: 12px 20px;
+        border-radius: 28px 28px 0 0;
     }}
-    .chat-body {{
-        background: rgba(255,248,231,0.55);
-        border: 1px solid {p['border']}; border-top: none; border-bottom: none;
-        padding: 20px 20px 8px;
-        min-height: 220px;
-    }}
-    .chat-footer {{
-        background: {p['card']};
-        border: 1px solid {p['border']}; border-top: 1px solid {p['border']};
-        border-radius: 0 0 28px 28px; padding: 10px 20px 14px;
+    .chat-footer-divider {{
+        border-top: 1px solid {p['border']};
+        margin: 10px -20px 10px;
     }}
     .msg-row {{ display: flex; align-items: flex-end; gap: 8px; margin: 14px 0; }}
     .msg-row.me {{ justify-content: flex-end; }}
@@ -401,7 +424,10 @@ def apply_theme():
     }}
 
     /* ⚠️ 위기 관련 요소 — 접근성 고대비 원칙 유지 (원본 1_채팅.py 주석 계승) */
-    .crisis-card {{
+    /* crisis-card 도 위와 같은 이유로 st.container(key="crisis_card") 로 교체 —
+       예전엔 이 div 안에 GPS 버튼, selectbox, expander 등 실제 위젯이 여러 개
+       들어있었는데 그 위젯들이 카드 밖으로 렌더링되던 것과 같은 문제였음. */
+    .st-key-crisis_card {{
         background: #FFFBEB; border: 2px solid #F59E0B; border-radius: 20px;
         padding: 1.2rem; margin: 0.8rem 0;
     }}
@@ -442,7 +468,7 @@ NAV = [
     ("chat",      "pages/1_채팅.py",             "💬", "대화하기"),
     ("analytics", "pages/2_분석대시보드.py",       "📊", "마음 일기"),
     ("types",     "pages/3_생각도감.py",          "📖", "생각도감"),
-    ("survey",    "pages/4_설문.py",             "📝", "설문"),
+    ("survey",    "pages/4_설문.py",             "📝", "사전 질문"),
     ("history",   "pages/5_이전대화기록.py",       "🗂️", "이전 대화"),
     ("career",    "pages/6_취업도우미.py",        "🌱", "취업 준비"),
 ]
@@ -480,6 +506,33 @@ def render_topbar(show_new_chat: bool = True):
                 unsafe_allow_html=True)
     
     
+# ── 서비스 이용 게이트: 로그인 + 필수 개인정보 동의 ────────────────
+# 채팅/분석대시보드/이전대화기록/취업도우미처럼 실제로 대화·개인 데이터를
+# 다루는 페이지 맨 위에서 호출한다. 로그인만 하고 사전 질문(4_설문.py)의
+# 필수 동의(agreed_terms, agreed_sensitive_profile) 두 개를 아직 안 했으면
+# 그 페이지 본문을 렌더링하지 않고 안내 후 st.stop() 한다.
+# (이전엔 로그인 없이도 채팅이 되고, 세션 저장 조회만 막혀 있는 등 제한이
+#  일관되지 않았음 — 이제 서비스 이용 자체를 필수 동의 뒤로 미룬다.)
+def has_required_consent() -> bool:
+    profile = st.session_state.get("user_profile") or {}
+    privacy = profile.get("privacy") or {}
+    return bool(privacy.get("agreed_terms")) and bool(privacy.get("agreed_sensitive_profile"))
+
+
+def require_consent():
+    if not st.session_state.get("is_logged_in"):
+        st.warning("먼저 로그인해주세요.")
+        if st.button("🔐 로그인하러 가기", key="require_consent_login_btn"):
+            st.switch_page(resolve_page("pages/0_로그인.py"))
+        st.stop()
+
+    if not has_required_consent():
+        st.warning("채팅, 마음 일기 등 서비스를 이용하려면 먼저 사전 질문의 필수 동의 항목을 완료해주세요.")
+        if st.button("📝 사전 질문 하러 가기", key="require_consent_survey_btn"):
+            st.switch_page(resolve_page("pages/4_설문.py"))
+        st.stop()
+
+
 def friendly_session_label(session_id: str, created_at: str | None = None) -> str:
     """긴 UUID 대신 생성 시각 기준 라벨 + 축약 ID로 표시."""
     short_id = (session_id or "")[:8]

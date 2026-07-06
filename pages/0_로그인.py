@@ -2,7 +2,7 @@ import streamlit as st
 
 from api_client import create_profile, get_profile, virtual_user_id
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar, resolve_page
+from ui_theme import apply_theme, has_required_consent, render_sidebar, render_topbar, resolve_page
 
 st.set_page_config(page_title="로그인 · 마음숲", page_icon="🔐", layout="wide")
 apply_theme()
@@ -30,25 +30,20 @@ with st.container(border=True):
         profile = get_profile() or create_profile()
         st.session_state.user_profile = profile
 
-        if profile.get("survey_completed"):
+        if has_required_consent():
             st.success("로그인 완료. 기존 프로필을 불러왔습니다.")
         else:
-            st.info("로그인 완료. 맞춤 응답을 위한 선택 설문이 있습니다 — 건너뛰어도 됩니다.")
+            st.info("로그인 완료. 채팅, 마음 일기 등 서비스를 이용하려면 사전 질문에서 필수 동의를 먼저 완료해주세요.")
         st.rerun()
 
     if st.session_state.get("is_logged_in"):
-        profile = st.session_state.get("user_profile") or {}
         st.divider()
-        if not profile.get("survey_completed"):
-            st.write("**답변하시면 상황에 더 맞는 안내를 드릴 수 있어요.** (선택, 나중에 하셔도 됩니다)")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("📝 지금 설문하기", use_container_width=True):
-                    st.switch_page(resolve_page("pages/4_설문.py"))
-            with c2:
-                if st.button("💬 나중에 하기", use_container_width=True):
-                    st.switch_page(resolve_page("pages/1_채팅.py"))
+        if not has_required_consent():
+            st.write("**서비스를 이용하려면 사전 질문의 필수 동의 항목을 완료해야 해요.** "
+                     "(나머지 답변 항목은 비워두셔도 됩니다)")
+            if st.button("📝 지금 사전 질문 하러 가기", use_container_width=True):
+                st.switch_page(resolve_page("pages/4_설문.py"))
         else:
-            st.success("설문이 완료된 계정이에요.")
+            st.success("사전 질문(필수 동의)이 완료된 계정이에요.")
             if st.button("💬 대화하러 가기", use_container_width=True):
                 st.switch_page(resolve_page("pages/1_채팅.py"))

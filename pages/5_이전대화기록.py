@@ -11,12 +11,15 @@ import streamlit as st
 
 from api_client import get_session, list_sessions
 from ui_theme import PALETTE as P
-from ui_theme import apply_theme, render_sidebar, render_topbar, safe_bubble_text
+from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent, safe_bubble_text
 
 st.set_page_config(page_title="이전 대화 기록 · 마음숲", page_icon="🗂️", layout="wide")
 apply_theme()
 render_sidebar(active="history")
 render_topbar(show_new_chat=False)
+
+# 로그인 + 필수 개인정보 동의(사전 질문) 없이는 이전 대화 기록을 이용할 수 없음
+require_consent()
 
 st.markdown(f"""
 <span class="ac-chip chip-sky">🗂️ 이전 대화</span>

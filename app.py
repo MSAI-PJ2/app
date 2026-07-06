@@ -91,55 +91,56 @@ act_rows = "".join(
     for i, (rank, label, meta) in enumerate(activities)
 )
 
-col_hero, col_villager = st.columns([2, 1], gap="medium")
+with st.container(key="home_hero_row"):
+    col_hero, col_villager = st.columns([2, 1], gap="medium")
 
-with col_hero:
-    st.markdown(f"""
-    <div class="ac-card" style='position:relative; overflow:hidden; height:100%; {hero_bg}
-         background-size:cover; background-position:center center;'>
-      <div style="padding:6.5rem 1.8rem 1.2rem;">
-        <span class="ac-chip chip-sunny">🍃 오늘의 서재</span>
-        <h1 style="margin:.5rem 0 .2rem; font-size:1.8rem;">어서와요, 오늘도 마음갈피와 함께해요</h1>
-        <p style="margin:0; font-size:.9rem; color:{P['muted_fg']};">
-          작은 생각도 소중한 한 페이지가 돼요. 편하게 대화를 시작해보세요.</p>
-        <a href="/채팅" target="_self" class="btn-primary"
-           style="position:absolute; right:1.8rem; bottom:1.4rem;">💌 대화 시작하기</a>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    with col_hero:
+        st.markdown(f"""
+        <div class="ac-card" style='position:relative; overflow:hidden; height:100%; {hero_bg}
+             background-size:cover; background-position:center center;'>
+          <div style="padding:6.5rem 1.8rem 1.2rem;">
+            <span class="ac-chip chip-sunny">🍃 오늘의 서재</span>
+            <h1 style="margin:.5rem 0 .2rem; font-size:1.8rem;">어서와요, 오늘도 마음갈피와 함께해요</h1>
+            <p style="margin:0; font-size:.9rem; color:{P['muted_fg']};">
+              작은 생각도 소중한 한 페이지가 돼요. 편하게 대화를 시작해보세요.</p>
+            <a href="/채팅" target="_self" class="btn-primary"
+               style="position:absolute; right:1.8rem; bottom:1.4rem;">💌 대화 시작하기</a>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-with col_villager:
-    st.markdown(f"""
-    <div class="ac-card" style="padding:1.3rem 1.4rem;height:100%;">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
-             display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
-             box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
-        <div class="font-display" style="font-size:1.05rem;">여울이</div>
-      </div>
-      <div style="display:flex;gap:6px;margin-top:12px;">
-        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
-             border-radius:14px;padding:8px 4px;text-align:center;
-             display:flex;flex-direction:column;justify-content:center;">
-          <div class="font-display" style="font-size:1rem;">{n_chat}</div>
-          <div style="font-size:.65rem;color:{P['muted_fg']};">대화</div></div>
-        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
-             border-radius:14px;padding:8px 4px;text-align:center;
-             display:flex;flex-direction:column;justify-content:center;">
-          <div class="font-display" style="font-size:1rem;">{n_reframe}</div>
-          <div style="font-size:.65rem;color:{P['muted_fg']};">재구성</div></div>
-        <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
-             border-radius:14px;padding:8px 4px;text-align:center;
-             display:flex;flex-direction:column;justify-content:center;">
-          <div class="font-display" style="font-size:1rem;">{n_days}일</div>
-          <div style="font-size:.65rem;color:{P['muted_fg']};">방문</div></div>
-      </div>
-      <div style="margin-top:14px;">
-        <div class="font-display" style="color:{P['primary']};font-size:.85rem;margin-bottom:6px;">🌟 오늘의 활동</div>
-        {act_rows}
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    with col_villager:
+        st.markdown(f"""
+        <div class="ac-card" style="padding:1.3rem 1.4rem;height:100%;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
+                 display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
+                 box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
+            <div class="font-display" style="font-size:1.05rem;">여울이</div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px;">
+            <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+                 border-radius:14px;padding:8px 4px;text-align:center;
+                 display:flex;flex-direction:column;justify-content:center;">
+              <div class="font-display" style="font-size:1rem;">{n_chat}</div>
+              <div style="font-size:.65rem;color:{P['muted_fg']};">대화</div></div>
+            <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+                 border-radius:14px;padding:8px 4px;text-align:center;
+                 display:flex;flex-direction:column;justify-content:center;">
+              <div class="font-display" style="font-size:1rem;">{n_reframe}</div>
+              <div style="font-size:.65rem;color:{P['muted_fg']};">재구성</div></div>
+            <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
+                 border-radius:14px;padding:8px 4px;text-align:center;
+                 display:flex;flex-direction:column;justify-content:center;">
+              <div class="font-display" style="font-size:1rem;">{n_days}일</div>
+              <div style="font-size:.65rem;color:{P['muted_fg']};">방문</div></div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="font-display" style="color:{P['primary']};font-size:.85rem;margin-bottom:6px;">🌟 오늘의 활동</div>
+            {act_rows}
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
 
@@ -149,23 +150,25 @@ menus = [
     ("/분석대시보드", "📊", "마음 일기", "지난 대화들을 모아 인지왜곡 분포와 변화 흐름을 볼 수 있어요.", "#D9B8E8", "chip-lilac"),
     ("/생각도감", "📖", "생각도감", "10가지 인지왜곡 유형을 도감처럼 하나씩 알아가요.", "#E39A86", "chip-coral"),
 ]
-cols = st.columns(3, gap="medium")
-for col, (url, emoji, title, desc, accent, tone) in zip(cols, menus):
-    with col:
-        st.markdown(f"""
-        <div class="ac-card" style="overflow:hidden;height:100%;display:flex;flex-direction:column;">
-          <div style="flex:0 0 8px;background:{accent};"></div>
-          <div style="padding:1.4rem 1.4rem 1.3rem;display:flex;flex-direction:column;flex:1 1 auto;">
-            <div class="ac-chip {tone}" style="width:46px;height:46px;justify-content:center;
-                 border-radius:16px;font-size:22px;padding:0;margin-bottom:12px;">{emoji}</div>
-            <h3 style="margin:0 0 4px;font-size:1.05rem;">{emoji} {title}</h3>
-            <p style="margin:0 0 10px;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
-            <a href="{url}" target="_self"
-               style="display:inline-block;color:{P['primary']};font-weight:800;
-                      font-size:.85rem;text-decoration:none;margin-top:auto;">시작하기 →</a>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+cols_container = st.container(key="home_menu_row")
+with cols_container:
+    cols = st.columns(3, gap="medium")
+    for col, (url, emoji, title, desc, accent, tone) in zip(cols, menus):
+        with col:
+            st.markdown(f"""
+            <div class="ac-card" style="overflow:hidden;height:100%;display:flex;flex-direction:column;">
+              <div style="flex:0 0 8px;background:{accent};"></div>
+              <div style="padding:1.4rem 1.4rem 1.3rem;display:flex;flex-direction:column;flex:1 1 auto;">
+                <div class="ac-chip {tone}" style="width:46px;height:46px;justify-content:center;
+                     border-radius:16px;font-size:22px;padding:0;margin-bottom:12px;">{emoji}</div>
+                <h3 style="margin:0 0 4px;font-size:1.05rem;">{emoji} {title}</h3>
+                <p style="margin:0 0 10px;font-size:.85rem;color:{P['muted_fg']};">{desc}</p>
+                <a href="{url}" target="_self"
+                   style="display:inline-block;color:{P['primary']};font-weight:800;
+                          font-size:.85rem;text-decoration:none;margin-top:auto;">시작하기 →</a>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 # ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
