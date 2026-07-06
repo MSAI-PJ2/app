@@ -56,7 +56,7 @@ services = [
 ]
 all_on = all(on for _, _, _, on, _ in services)
 
-# ── 히어로 + 여울이 프로필 (좌우 배치) ────────────────────────────
+# ── 히어로 + 말랑이 프로필 (좌우 배치) ────────────────────────────
 hero = img_b64("bookmark-hero.svg")
 hero_bg = (
     f'background-image: linear-gradient(to top, rgba(255,248,231,0.96) 8%, rgba(255,248,231,0.45) 45%, transparent), url("{hero}");'
@@ -116,7 +116,7 @@ with st.container(key="home_hero_row"):
             <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
                  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
                  box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
-            <div class="font-display" style="font-size:1.05rem;">여울이</div>
+            <div class="font-display" style="font-size:1.05rem;">말랑이</div>
           </div>
           <div style="display:flex;gap:6px;margin-top:12px;">
             <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
@@ -173,7 +173,3 @@ with cols_container:
 
 # ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
 st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-if not all_on:
-    st.info("💡 **시작하기**: 왼쪽 레일에서 **💬 대화하기**를 선택하세요. 위에 '닫힘'으로 표시된 상점은 `.env` 설정 또는 팀원 작업(모델 배포 등)이 필요해요.")
-else:
-    st.success("✅ 모든 Azure 상점이 문을 열었어요. **💬 대화하기**에서 바로 시작해보세요.")
