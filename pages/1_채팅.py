@@ -406,10 +406,12 @@ if user_input:
                     primary = event.get("primary")
                     labels = event.get("labels") or []
                     confidence = next((l["score"] for l in labels if l["label"] == primary), 0.0)
-                    if primary:
+                    if primary and primary not in NON_DISTORTION_LABELS:
                         distortion_placeholder.markdown(
                             f'<span class="distortion-badge">{primary}</span><br><small>신뢰도: {confidence:.0%}</small>',
                             unsafe_allow_html=True)
+                    elif primary:  # '불충분'·'정상'은 인지왜곡이 아니므로 왜곡 유형으로 표시하지 않는다
+                        distortion_placeholder.caption("감지된 인지왜곡 없음")
 
                 elif etype == "crisis":
                     is_crisis = True

@@ -225,6 +225,7 @@ def distortion_label(d):
     이력에 남기되, 왜곡으로 오분류하지 않는다.)"""
     return "왜곡 없음" if d in NON_DISTORTIONS else d
 
+
 # ── 통계 필 4개 (analytics.tsx Stat pills) ───────────────────────
 _dist_vc = df_distortion["distortion"].value_counts()
 top_distortion = _dist_vc.index[0] if not _dist_vc.empty else "—"
