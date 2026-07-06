@@ -135,7 +135,7 @@ with col_chat:
          display:flex;align-items:center;justify-content:center;font-size:20px;
          box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🍃</div>
     <div>
-      <div class="font-display" style="font-size:.95rem;">여울이 · 마음숲 친구</div>
+      <div class="font-display" style="font-size:.95rem;">말랑이 · 마음숲 친구</div>
       <div style="font-size:.72rem;color:{P['muted_fg']};">
         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
               background:{P['leaf_deep']};vertical-align:middle;"></span>
@@ -260,7 +260,7 @@ with col_chat:
         audio_value = None
         image_value = None
         if input_mode == "✍️ 텍스트":
-            user_input = st.chat_input("여울이에게 편지를 써보세요…")
+            user_input = st.chat_input("말랑이에게 편지를 써보세요…")
         elif input_mode == "🎙️ 음성":
             audio_value = st.audio_input("마이크로 말해보세요", key=f"audio_input_{st.session_state.input_widget_seq}")
         elif input_mode == "🖼️ 카톡 캡쳐":
@@ -383,7 +383,7 @@ if user_input:
     # 순서: progress(input) -> progress(analyze) -> meta -> chunks -> progress(route)
     #       -> token... -> progress(generate) -> [progress(speak)] -> done
     try:
-        with st.spinner("여울이가 편지를 쓰는 중…"):
+        with st.spinner("말랑이가 편지를 쓰는 중…"):
             for event in respond_stream(st.session_state.session_id, user_input):
                 etype = event.get("type")
 

@@ -56,7 +56,7 @@ services = [
 ]
 all_on = all(on for _, _, _, on, _ in services)
 
-# ── 히어로 + 여울이 프로필 (좌우 배치) ────────────────────────────
+# ── 히어로 + 말랑이 프로필 (좌우 배치) ────────────────────────────
 hero = img_b64("bookmark-hero.svg")
 hero_bg = (
     f'background-image: linear-gradient(to top, rgba(255,248,231,0.96) 8%, rgba(255,248,231,0.45) 45%, transparent), url("{hero}");'
@@ -116,7 +116,7 @@ with st.container(key="home_hero_row"):
             <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
                  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
                  box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
-            <div class="font-display" style="font-size:1.05rem;">여울이</div>
+            <div class="font-display" style="font-size:1.05rem;">말랑이</div>
           </div>
           <div style="display:flex;gap:6px;margin-top:12px;">
             <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
