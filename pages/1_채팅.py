@@ -193,16 +193,6 @@ with col_chat:
 
         st.markdown('<div class="chat-footer-divider"></div>', unsafe_allow_html=True)
 
-        # 빠른 답장 칩 (chat.tsx composer 하단 칩) — 누르면 바로 전송
-        # (이제 chat_card 컨테이너 안에 실제로 위치하므로 카드 밖으로 나오지 않음)
-        quick = ["🌱 오늘 있었던 일", "🌧️ 속상한 마음", "🌟 다시 생각해보기", "🌸 감사한 순간"]
-        qcols = st.columns(len(quick))
-        for qc, q in zip(qcols, quick):
-            with qc:
-                if st.button(q, key=f"quick_{q}", use_container_width=True):
-                    st.session_state.queued_input = q[2:].strip() + "에 대해 이야기하고 싶어요"
-                    st.rerun()
-
         # ── 위기 감지 후 위치 입력 대기 (GPS + selectbox 폴백) ──
         # crisis-card 도 같은 이유로 st.container(key="crisis_card")로 교체.
         if st.session_state.awaiting_location:
