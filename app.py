@@ -173,7 +173,3 @@ with cols_container:
 
 # ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
 st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-if not all_on:
-    st.info("💡 **시작하기**: 왼쪽 레일에서 **💬 대화하기**를 선택하세요. 위에 '닫힘'으로 표시된 상점은 `.env` 설정 또는 팀원 작업(모델 배포 등)이 필요해요.")
-else:
-    st.success("✅ 모든 Azure 상점이 문을 열었어요. **💬 대화하기**에서 바로 시작해보세요.")
