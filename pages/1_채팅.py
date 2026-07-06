@@ -19,6 +19,32 @@ apply_theme()
 render_sidebar(active="chat")
 render_topbar()
 
+# ── 우측 패널 고정 (팀 피드백: "채팅에서 우측 스크롤되지 않게") ──────
+# 채팅이 길어지면 우측 패널(처리 단계/왜곡/위기 카드)이 같이 위로 밀려
+# 사라지는 문제 → position: sticky 로 화면에 고정한다.
+# ⚠️ ui_theme.py 전역 규칙 두 개가 sticky 를 무력화하므로 이 페이지에서만 덮어씀:
+#   1) stHorizontalBlock 의 align-items: stretch → 컬럼이 반대편 높이만큼
+#      늘어나 버리면 sticky 가 움직일 여백이 없음 → flex-start 로.
+#   2) stColumn 내부 div 전부 height:100% → sticky 컨테이너 높이 계산이
+#      깨짐 → auto 로 되돌림.
+# 이 페이지엔 topbar/빠른답장 칩 등 다른 st.columns 도 있어서, 우측 패널에만
+# 존재하는 .pipeline-step 을 :has() 앵커로 써서 정확히 그 컬럼만 잡는다.
+st.markdown("""
+<style>
+div[data-testid="stHorizontalBlock"]:has(.pipeline-step) { align-items: flex-start !important; }
+div[data-testid="stColumn"]:has(.pipeline-step) {
+    position: sticky;
+    top: 0.8rem;
+    align-self: flex-start;
+    max-height: calc(100vh - 1.6rem);
+    overflow-y: auto;          /* 패널 자체가 화면보다 길 때만 내부 스크롤 */
+    scrollbar-width: none;      /* 내부 스크롤바는 숨겨서 깔끔하게 */
+}
+div[data-testid="stColumn"]:has(.pipeline-step)::-webkit-scrollbar { display: none; }
+div[data-testid="stColumn"]:has(.pipeline-step) div { height: auto !important; }
+</style>
+""", unsafe_allow_html=True)
+
 SIDO_OPTIONS = [
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
     "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도",
