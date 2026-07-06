@@ -5,13 +5,13 @@
 
 import hashlib
 
-DEMO_USER_ID = "demo-마음숲"
+DEMO_USER_ID = "demo-마음갈피"
 DEMO_SESSION_COUNT = 20
 
 # 데모 id 트리거(로그인): 이 이메일로 로그인하면 0_로그인.py 가 st.session_state.user_id 를
 # virtual_user_id(email)=sha256[:32] 로 저장한다. 대시보드가 그 uid 를 감지해 데모 통계를
 # 자동 표시한다. (데모 세션 레코드 시더와 동일 이메일 — 계정 일관성)
-DEMO_LOGIN_EMAIL = "demo@maeumsup.kr"
+DEMO_LOGIN_EMAIL = "demo@galpi.kr"
 DEMO_LOGIN_UID = hashlib.sha256(DEMO_LOGIN_EMAIL.strip().lower().encode("utf-8")).hexdigest()[:32]
 
 # load_session_turns() 반환과 같은 행 형태 + session_name. distortion=selected 라벨 단위(동시 왜곡=여러 행).
@@ -47,5 +47,22 @@ DEMO_ROWS = [
 ]
 
 def demo_stats_rows():
-    """데모 픽스처 행 리스트(복사본)."""
-    return [dict(r) for r in DEMO_ROWS]
+    """데모 픽스처 행 리스트 — 실데이터 경로(load_session_turns)와 동일하게 발화당 1행.
+
+    DEMO_ROWS 는 멀티라벨(한 발화가 여러 왜곡)을 라벨당 여러 행으로 담고 있지만,
+    실제 대시보드는 발화당 한 행(primary=대표 왜곡)만 표시한다. 그래서 여기서
+    세션(session_id)별로 접어 최고 신뢰도 라벨을 primary 로 골라 1행으로 만든다.
+    (안 접으면 같은 발화가 여러 줄로 중복돼 실제 동작과 어긋나 보인다.)
+    """
+    best: dict[str, dict] = {}
+    for r in DEMO_ROWS:
+        sid = r["session_id"]
+        if sid not in best or r["confidence"] > best[sid]["confidence"]:
+            best[sid] = r
+    seen, ordered = set(), []
+    for r in DEMO_ROWS:  # 원본 등장 순서(최신→과거) 유지
+        sid = r["session_id"]
+        if sid not in seen:
+            seen.add(sid)
+            ordered.append(dict(best[sid]))
+    return ordered

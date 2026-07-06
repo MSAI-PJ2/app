@@ -202,7 +202,7 @@ if df.empty:
 if is_demo:
     from demo_data import DEMO_SESSION_COUNT
     st.caption(f"🧪 데모 통계 — 사용자 `{DEMO_USER_ID}` 의 세션 {DEMO_SESSION_COUNT}개를 가로질러 집계한 "
-               f"기록 {len(df_all)}건(왜곡 라벨 단위). 기간 필터·분포는 실제로 동작합니다.")
+               f"기록 {len(df_all)}건(발화당 대표 왜곡). 기간 필터·분포는 실제로 동작합니다.")
 elif using_sample:
     if session_id:
         st.info(f"💡 세션 `{session_id[:8]}…` 에 저장된 대화 기록을 찾지 못했어요. 샘플 데이터로 미리 보여드려요.")
@@ -213,8 +213,21 @@ else:
 
 st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
 
+# '불충분'(신호 부족)·'정상'·'미분류'는 인지왜곡 유형이 아니므로, 왜곡 지표
+# (최다 감지 왜곡·왜곡 유형 분포)에서는 제외한다. '대화' 총계·신뢰도는 전체 기준.
+NON_DISTORTIONS = ("불충분", "정상", "미분류")
+df_distortion = df[~df["distortion"].isin(NON_DISTORTIONS)]
+
+
+def distortion_label(d):
+    """왜곡이 아닌 분류(불충분/정상/미분류)는 화면에 '왜곡 없음'으로 표기한다 —
+    이력 표·편지 칩에서 이들이 '왜곡 유형'처럼 보이지 않게 하려는 것. (대화 자체는
+    이력에 남기되, 왜곡으로 오분류하지 않는다.)"""
+    return "왜곡 없음" if d in NON_DISTORTIONS else d
+
 # ── 통계 필 4개 (analytics.tsx Stat pills) ───────────────────────
-top_distortion = df["distortion"].value_counts().index[0]
+_dist_vc = df_distortion["distortion"].value_counts()
+top_distortion = _dist_vc.index[0] if not _dist_vc.empty else "—"
 avg_conf = df["confidence"].mean()
 rag_ratio = (df["route"] == "RAG").mean()
 n_days = df["date"].nunique()
@@ -262,7 +275,7 @@ with c_bar:
   </div>
 </div>""", unsafe_allow_html=True)
 
-    dist_counts = df["distortion"].value_counts().head(7).reset_index()
+    dist_counts = df_distortion["distortion"].value_counts().head(7).reset_index()
     dist_counts.columns = ["distortion", "count"]
     fig_bar = go.Figure(go.Bar(
         x=dist_counts["distortion"], y=dist_counts["count"],
@@ -317,7 +330,7 @@ letters = "".join(
       </div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
         {f'<span class="ac-chip chip-lilac">📁 {getattr(r, "session_name", "")}</span>' if getattr(r, "session_name", "") else ''}
-        <span class="ac-chip chip-coral">{r.distortion}</span>
+        <span class="ac-chip chip-coral">{distortion_label(r.distortion)}</span>
         <span class="ac-chip chip-sky">{r.route}</span>
       </div>
     </div>"""
@@ -336,10 +349,12 @@ st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
 # ── 전체 이력 표 + CSV 다운로드 (기존 기능 유지 — expander로 정리) ──
 with st.expander("📋 전체 대화 이력 조회 · 필터 · CSV 다운로드"):
-    all_types = ["전체"] + sorted(df["distortion"].unique().tolist())
+    hist = df.copy()
+    hist["distortion"] = hist["distortion"].apply(distortion_label)  # 불충분/정상 → '왜곡 없음'
+    all_types = ["전체"] + sorted(hist["distortion"].unique().tolist())
     selected_type = st.selectbox("왜곡 유형 필터", all_types)
 
-    filtered_df = df if selected_type == "전체" else df[df["distortion"] == selected_type]
+    filtered_df = hist if selected_type == "전체" else hist[hist["distortion"] == selected_type]
 
     display_df = filtered_df[["timestamp", "distortion", "confidence", "route", "user_text"]].copy()
     display_df.columns = ["시간", "왜곡 유형", "신뢰도", "라우팅", "발화 내용"]

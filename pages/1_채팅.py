@@ -279,7 +279,9 @@ with col_side:
     st.markdown(f"""<div class="ac-card" style="padding:1.2rem 1.3rem 0.4rem;margin-bottom:0.45rem;">
     <div class="font-display" style="margin-bottom:6px;">🔄 처리 단계</div></div>""", unsafe_allow_html=True)
     pipeline_placeholder = st.empty()
-    pipeline_placeholder.markdown("""
+    # [로컬 데모 우회] 완료 후 rerun 되면 패널이 대기로 리셋돼 결과가 안 보이던 문제 —
+    # 직전 처리의 최종 단계 상태(_last_pipeline_html)가 있으면 그걸 유지 표시한다.
+    pipeline_placeholder.markdown(st.session_state.get("_last_pipeline_html") or """
 <div class="pipeline-step">⬜ ① 안전하게 살펴보는 중 (대기)</div>
 <div class="pipeline-step">⬜ ② 생각 패턴 살펴보는 중 (대기)</div>
 <div class="pipeline-step">⬜ ③ 답변 방식 정하는 중 (대기)</div>
@@ -348,6 +350,7 @@ def render_pipeline(steps):
         css = "pipeline-step" + (" done" if status == "done" else " error" if status == "error" else " crisis" if status == "crisis" else "")
         html += f'<div class="{css}">{icons.get(icon_key,"⬜")} {labels[key]}</div>'
     pipeline_placeholder.markdown(html, unsafe_allow_html=True)
+    st.session_state["_last_pipeline_html"] = html  # [로컬 데모] 완료 후에도 결과가 남게 저장
 
 
 # 빠른 답장 칩으로 큐된 입력이 있으면 그것을 사용
