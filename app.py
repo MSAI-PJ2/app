@@ -178,3 +178,45 @@ with cols_container:
 
 # ── 하단 안내 (기존 app.py 안내 유지) ────────────────────────────
 st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+
+# ── 스폰서 광고 팝업 (수익성 — 심사 항목 '시장 가능성' 대응용 목업) ──
+# 실제 광고 서버 연동 없이, 파트너십/스폰서 안내를 팝업(모달)으로 보여주는 정적 목업이다.
+# "광고" 라벨을 붙여 사용자에게 광고 콘텐츠임을 명확히 표시한다 (투명성).
+ads = [
+    ("🏛️", "대한상공회의소", "청소년 마음건강 지원 사업과 함께합니다", "#FDE9C8"),
+    ("🪟", "Microsoft for Startups", "Azure로 만든 AI 상담 보조 서비스, 마음갈피", "#D6E8FA"),
+]
+
+
+@st.dialog("스폰서 안내")
+def show_sponsor_dialog():
+    st.markdown(
+        f'<span class="ac-chip" style="font-size:.68rem;">광고</span>',
+        unsafe_allow_html=True,
+    )
+    for emoji, name, desc, tone in ads:
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;border:1px solid {P["border"]};'
+            f'background:{tone};border-radius:16px;padding:14px 16px;margin-top:10px;">'
+            f'<div style="font-size:28px;">{emoji}</div>'
+            f'<div><div style="font-weight:800;font-size:.95rem;">{name}</div>'
+            f'<div style="font-size:.8rem;color:{P["muted_fg"]};">{desc}</div></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+    if st.button("닫기", use_container_width=True, key="sponsor_dialog_close"):
+        st.rerun()
+
+
+# 세션당 한 번, 마을 광장(홈) 첫 진입 시 자동으로 팝업을 띄운다.
+if "sponsor_ad_shown" not in st.session_state:
+    st.session_state.sponsor_ad_shown = True
+    show_sponsor_dialog()
+
+# 닫은 뒤에도 다시 볼 수 있도록 하단에 작은 재실행 버튼을 남겨둔다.
+st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+_, col_ad_btn = st.columns([5, 1])
+with col_ad_btn:
+    if st.button("🏛️ 스폰서 안내", key="sponsor_dialog_reopen", use_container_width=True):
+        show_sponsor_dialog()
