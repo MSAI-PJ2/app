@@ -69,7 +69,7 @@ st.markdown(f"""
   <div style="font-size:1.25rem; font-weight:800; color:{P['fg_deep']};">🌱 취업 준비 — 근거로 확인하는 나의 자리</div>
   <div class="small-note" style="margin-top:.3rem;">
     "다 떨어질 거야" 같은 생각이 들 때, 실제 공고와 내 경험을 비교한 <b>사실 근거</b>를 만들어 드려요.
-    여기서 나온 근거 문장은 <b>대화하기</b>에서 말랑이가 함께 봐요.
+    여기서 나온 근거 문장은 <b>대화하기</b>에서 마음갈피가 함께 봐요.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -214,7 +214,7 @@ if a and "fit_score" in a:
                         unsafe_allow_html=True)
 
     if a.get("reframe_evidence"):
-        st.markdown("**말랑이가 기억할 사실 근거** — \"다 안 될 거야\"라는 생각이 들 때 함께 봐요")
+        st.markdown("**마음갈피가 기억할 사실 근거** — \"다 안 될 거야\"라는 생각이 들 때 함께 봐요")
         for ev in a["reframe_evidence"]:
             st.markdown(f'<div class="evidence-card">🍃 {ev}</div>', unsafe_allow_html=True)
     st.caption(a.get("caveat", ""))
