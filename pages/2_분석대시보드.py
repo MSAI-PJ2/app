@@ -209,10 +209,7 @@ if is_demo:
     st.caption(f"🧪 데모 통계 — 사용자 `{DEMO_USER_ID}` 의 세션 {DEMO_SESSION_COUNT}개를 가로질러 집계한 "
                f"기록 {len(df_all)}건(발화당 대표 왜곡). 기간 필터·분포는 실제로 동작합니다.")
 elif using_sample:
-    if session_id:
-        st.info(f"💡 세션 `{session_id[:8]}…` 에 저장된 대화 기록을 찾지 못했어요. 샘플 데이터로 미리 보여드려요.")
-    else:
-        st.info("💡 아직 대화 이력이 없어요. 샘플 데이터로 미리 보여드려요. **💬 대화하기**에서 대화하면 실제 데이터로 바뀝니다.")
+    pass
 else:
     st.caption(f"세션 `{session_id[:8]}…` 의 실제 대화 기록 {len(df_all)}건을 표시하고 있어요.")
 
