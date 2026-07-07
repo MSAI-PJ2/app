@@ -1,3 +1,4 @@
+import html
 import random
 from datetime import datetime, timedelta
 
@@ -94,16 +95,31 @@ if admin_view:
 
 
 # ── 샘플 데이터 (백엔드 세션이 없을 때만 사용) ────────────────────
+# 유형별로 실제 발화처럼 보이는 예문을 매칭한다 ("샘플 발화 1"류의 자리표시자 대신).
+SAMPLE_UTTERANCES = {
+    "이분법적 사고": "완벽하게 해내지 못하면 그건 완전히 실패한 거나 마찬가지예요",
+    "과잉일반화": "이번에도 망쳤으니까 저는 뭘 해도 항상 이런 식이에요",
+    "심리적 여과": "다른 건 다 괜찮았는데 그 한마디만 계속 마음에 걸려요",
+    "긍정 격하": "칭찬을 받긴 했지만 그냥 운이 좋았을 뿐 제 실력은 아니에요",
+    "성급한 결론": "답장이 늦는 걸 보니 저한테 관심이 없는 게 분명해요",
+    "과장/축소": "작은 실수 하나 했을 뿐인데 모든 게 다 무너진 기분이에요",
+    "감정적 추론": "이렇게 불안한 걸 보면 분명 안 좋은 일이 생길 것 같아요",
+    "당위적 진술": "저는 항상 완벽해야 하고 실수는 절대 하면 안 돼요",
+    "잘못된 명명": "저는 원래 게으르고 무능한 사람이에요",
+    "개인화": "회의가 잘 안 풀린 건 다 저 때문인 것 같아요",
+}
+
+
 def make_sample_data():
-    distortions = ["이분법적 사고", "과잉일반화", "심리적 여과", "긍정 격하", "성급한 결론",
-                   "과장/축소", "감정적 추론", "당위적 진술", "잘못된 명명", "개인화"]
+    distortions = list(SAMPLE_UTTERANCES.keys())
     rows = []
     base = datetime.now() - timedelta(days=14)
     for i in range(30):
+        picked = random.choice(distortions)
         rows.append({
             "timestamp": (base + timedelta(hours=i * 10)).strftime("%Y-%m-%d %H:%M"),
-            "user_text": f"샘플 발화 {i+1}",
-            "distortion": random.choice(distortions),
+            "user_text": SAMPLE_UTTERANCES[picked],
+            "distortion": picked,
             "confidence": round(random.uniform(0.6, 0.98), 2),
             "route": random.choice(["STS", "RAG"]),
             "turn_index": None,
@@ -319,21 +335,49 @@ def rel_date(ts: datetime) -> str:
     return "오늘" if d == 0 else "어제" if d == 1 else f"{d}일 전"
 
 
-letters = "".join(
-    f"""<div style="border:1px solid {P['border']};background:rgba(255,248,231,0.6);
-         border-radius:20px;padding:14px 16px;">
-      <div style="display:flex;justify-content:space-between;gap:10px;">
-        <div style="font-weight:700;font-size:.9rem;">{(r.user_text[:28] + '…') if len(r.user_text) > 28 else r.user_text}</div>
-        <span style="font-size:.72rem;color:{P['muted_fg']};white-space:nowrap;">{rel_date(r.timestamp)}</span>
-      </div>
-      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
-        {f'<span class="ac-chip chip-lilac">📁 {getattr(r, "session_name", "")}</span>' if getattr(r, "session_name", "") else ''}
-        <span class="ac-chip chip-coral">{distortion_label(r.distortion)}</span>
-        <span class="ac-chip chip-sky">{r.route}</span>
-      </div>
-    </div>"""
-    for r in recent.itertuples()
-)
+def safe_preview(text: str, limit: int = 28) -> str:
+    """실제 사용자 발화를 HTML 카드에 안전하게 삽입한다.
+
+    사용자가 '<', '>', '&' 같은 문자를 입력하면 이스케이프 없이 그대로 HTML에 꽂아 넣던
+    기존 코드가 마크업을 깨뜨려 태그/코드가 화면에 그대로 노출되는 버그가 있었다. 자르기는
+    원문 기준으로 먼저 하고, 그 다음에 이스케이프해서 엔티티가 잘리지 않게 한다.
+    """
+    truncated = (text[:limit] + "…") if len(text) > limit else text
+    return html.escape(truncated)
+
+
+def build_letter_card(r) -> str:
+    """편지 카드 하나를 만든다.
+
+    ⚠️ 반드시 줄바꿈 없이 한 줄짜리 조각만 이어붙일 것. 예전 코드는 여러 줄 f-string 안에
+    `{조건부 표현식}`을 한 줄 통째로 넣었는데, session_name이 없는(=거의 항상) 경우 그 표현식이
+    빈 문자열로 치환되면서 그 줄 전체가 "공백만 있는 줄"이 돼버렸다. Streamlit 마크다운
+    파서는 공백 줄을 만나면 거기서 HTML 블록이 끝났다고 판단해서, 그 다음에 오는 태그들을
+    HTML이 아니라 들여쓰기된 텍스트(코드)로 그대로 노출시켰다 — 이게 "코드 노출" 버그의
+    근본 원인이었다. 한 줄 문자열만 이어붙이면 애초에 공백 줄이 생길 수 없다.
+    """
+    session_name = getattr(r, "session_name", "")
+    session_chip = (
+        f'<span class="ac-chip chip-lilac">📁 {html.escape(session_name)}</span>'
+        if session_name else ""
+    )
+    return (
+        f'<div style="border:1px solid {P["border"]};background:rgba(255,248,231,0.6);'
+        f'border-radius:20px;padding:14px 16px;">'
+        f'<div style="display:flex;justify-content:space-between;gap:10px;">'
+        f'<div style="font-weight:700;font-size:.9rem;">{safe_preview(r.user_text)}</div>'
+        f'<span style="font-size:.72rem;color:{P["muted_fg"]};white-space:nowrap;">{rel_date(r.timestamp)}</span>'
+        f'</div>'
+        f'<div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
+        f'{session_chip}'
+        f'<span class="ac-chip chip-coral">{distortion_label(r.distortion)}</span>'
+        f'<span class="ac-chip chip-sky">{r.route}</span>'
+        f'</div>'
+        f'</div>'
+    )
+
+
+letters = "".join(build_letter_card(r) for r in recent.itertuples())
 st.markdown(f"""
 <div class="ac-card" style="padding:1.4rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
