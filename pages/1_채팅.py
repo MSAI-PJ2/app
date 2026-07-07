@@ -1,6 +1,5 @@
 import base64
 import uuid
-from collections import Counter
 from datetime import datetime
 
 import streamlit as st
@@ -313,9 +312,11 @@ with col_side:
     st.markdown(f'<hr style="margin:.5rem 0;border:none;border-top:1px solid {P["border"]};">',
                unsafe_allow_html=True)
 
-    # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
-    # 멀티라벨: 한 발화에 동시 감지된 왜곡을 모두 펼쳐 빈도를 센다(primary만 세던 것에서 개선).
-    # 구버전 행('distortions' 없음)은 primary 로 폴백하되, '정상'·'불충분'은 왜곡이 아니므로 제외.
+    # 최근 감지된 왜곡 — 빈도(Counter.most_common)가 아니라 "최신순 유일 유형" 기준.
+    # 예전엔 전체 이력에서 가장 많이 나온 4개만 고정으로 떠서, 새 유형이 생겨도 기존
+    # 상위 4개를 못 이기면 영원히 안 보이는 문제가 있었다. 그래서 최근 대화부터 거꾸로
+    # 훑으면서 "처음 보는 유형"만 최대 4개 모으는 방식으로 바꿨다 — 방금 감지된 새 유형이
+    # 항상 먼저 보인다. 멀티라벨(한 발화에 왜곡 여러 개)도 그대로 지원.
     def _row_distortions(h):
         ds = h.get("distortions")
         if isinstance(ds, list) and ds:
@@ -323,28 +324,38 @@ with col_side:
         d = h.get("distortion")
         return [d] if d and d not in NON_DISTORTION_LABELS else []
 
-    all_d = [d for h in st.session_state.distortion_history for d in _row_distortions(h)]
-    bar_tones = ["#E39A86", "#D9B8E8", "#C4DCEA", "#F3DD8F"]
-    if all_d:
-        counts = Counter(all_d).most_common(4)
-        total = len(all_d) or 1  # 분모 = 감지 건수 전체(멀티라벨) → 분포 비율
-        rows = [(name, round(cnt / total * 100)) for name, cnt in counts]
-    else:
-        rows = [("과잉일반화", 0), ("잘못된 명명", 0), ("감정적 추론", 0), ("당위적 진술", 0)]
+    recent_types = []
+    for h in reversed(st.session_state.distortion_history):
+        for d in _row_distortions(h):
+            if d not in recent_types:
+                recent_types.append(d)
+        if len(recent_types) >= 4:
+            break
+    recent_types = recent_types[:4]
 
-    bars = "".join(
-        f"""<div style="display:flex;justify-content:space-between;font-size:.75rem;">
-              <span style="font-weight:700;">{name}</span>
-              <span style="color:{P['muted_fg']};">{pct}%</span></div>
-            <div class="bar-track"><div class="bar-fill" style="width:{pct}%;background:{bar_tones[i % 4]};"></div></div>"""
-        for i, (name, pct) in enumerate(rows)
+    # 아래 rows_html/empty 문구는 f-string 안에 조건부 표현식을 한 줄 통째로 넣지 않는다.
+    # (그렇게 하면 조건에 따라 그 줄이 공백만 남는 줄이 될 수 있고, Streamlit 마크다운
+    # 파서가 그 지점에서 HTML 블록을 끊어 뒤의 태그를 코드처럼 노출시키는 버그가 생긴다 —
+    # "마음 일기" 최근 대화 편지에서 겪은 것과 같은 문제라 미리 같은 패턴으로 피해간다.)
+    tone_classes = ["chip-coral", "chip-lilac", "chip-sky", "chip-sunny"]
+    if recent_types:
+        rows_html = "".join(
+            f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
+            f'<span class="ac-chip {tone_classes[i % 4]}" style="font-size:.7rem;">{i + 1}</span>'
+            f'<span style="font-weight:700;font-size:.85rem;">{name}</span>'
+            f'</div>'
+            for i, name in enumerate(recent_types)
+        )
+    else:
+        rows_html = f'<div style="font-size:.72rem;color:{P["muted_fg"]};">아직 대화 이력이 없어요</div>'
+
+    st.markdown(
+        f'<div class="ac-card" style="padding:1.3rem;margin-bottom:0.45rem;">'
+        f'<div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>'
+        f'{rows_html}'
+        f'</div>',
+        unsafe_allow_html=True,
     )
-    st.markdown(f"""
-<div class="ac-card" style="padding:1.3rem;margin-bottom:0.45rem;">
-  <div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>
-  {bars}
-  {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not all_d else ''}
-</div>""", unsafe_allow_html=True)
 
     # 🚨 위기 시 도움받기 (chat.tsx 사이드 카드 — 번호는 백엔드 EMERGENCY와 동일 체계)
     hotlines = [("자살예방 상담전화", "109"), ("정신건강 위기상담", "1577-0199"),
