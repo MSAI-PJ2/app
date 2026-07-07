@@ -5,12 +5,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-# [로컬 우회 — 커밋 금지] COSMOS_ENDPOINT 비어있으면 container=None (단일 게이트웨이 env 로컬 테스트용).
-# 위기 센터 조회(get_centers/get_sigungu_list)는 위기 분기에서만 호출되므로 일반 대화는 정상 동작한다.
-# 근본 해결은 위기 센터를 게이트웨이 crisis payload(resources[])로 일원화하는 것(단일 API 감사 참고).
-_ep, _key = os.getenv("COSMOS_ENDPOINT"), os.getenv("COSMOS_KEY")
-container = (CosmosClient(url=_ep, credential=_key)
-             .get_database_client("cbt-db").get_container_client("kfsp_centers")) if (_ep and _key) else None
+container = CosmosClient(
+    url=os.getenv("COSMOS_ENDPOINT"),
+    credential=os.getenv("COSMOS_KEY")
+).get_database_client("cbt-db").get_container_client("kfsp_centers")
 
 # [팀 결정 필요] 순서 확정되면 숫자만 조정
 PRIORITY = {
