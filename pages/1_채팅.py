@@ -1,3 +1,4 @@
+import base64
 import uuid
 from collections import Counter
 from datetime import datetime
@@ -168,10 +169,14 @@ with col_chat:
         for msg in st.session_state.messages:
             time_str = msg.get("time", "")
             if msg["role"] == "user":
+                # 카톡 캡쳐 업로드 메시지는 추출 텍스트 대신 업로드한 이미지를 버블에 그대로 보여준다
+                body = (f'<img src="{msg["image"]}" alt="업로드한 카톡 캡쳐" '
+                        f'style="max-width:240px;max-height:360px;border-radius:12px;display:block;" />'
+                        if msg.get("image") else safe_bubble_text(msg["content"]))
                 st.markdown(f"""
 <div class="msg-row me">
   <div class="msg-col me">
-    <div class="bubble me">{safe_bubble_text(msg["content"])}</div>
+    <div class="bubble me">{body}</div>
   </div>
   <div class="msg-avatar me">🐰</div>
 </div>""", unsafe_allow_html=True)
@@ -558,7 +563,11 @@ elif input_mode == "🖼️ 카톡 캡쳐" and image_value is not None:
     mime = "image/jpeg" if image_value.type in ("image/jpeg", "image/jpg") else "image/png"
     sender_names = [kakao_sender.strip()] if st.session_state.get("kakao_sender", "").strip() else []
 
-    st.session_state.messages.append({"role": "user", "content": "🖼️ (카톡 캡쳐 업로드)", "time": now_str})
+    # 채팅 버블에 추출 텍스트가 아니라 업로드한 이미지를 그대로 표시 — 분석 대상 원본을 눈으로 확인.
+    # (OCR 추출 텍스트는 여전히 게이트웨이로 보내 분류하되, 화면에는 이미지만 보여준다.)
+    image_data_uri = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
+    st.session_state.messages.append({"role": "user", "content": "🖼️ (카톡 캡쳐 업로드)",
+                                      "image": image_data_uri, "time": now_str})
     st.session_state.last_crisis_result = None
     steps = {k: ("⬜", "pending") for k in ["safety", "classify", "router", "rag", "openai"]}
     render_pipeline(steps)
