@@ -110,13 +110,18 @@ with st.container(key="home_hero_row"):
         """, unsafe_allow_html=True)
 
     with col_villager:
+        if st.session_state.get("is_logged_in"):
+            villager_name = "말랑이"
+        else:
+            villager_name = f"""<a href="/로그인" target="_self"
+                 style="color:{P['primary']};text-decoration:none;">로그인하세요 →</a>"""
         st.markdown(f"""
         <div class="ac-card" style="padding:1.3rem 1.4rem;height:100%;">
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="width:48px;height:48px;border-radius:16px;background:rgba(192,248,229,0.5);
                  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
                  box-shadow:0 6px 20px -6px rgba(45,143,110,0.25);">🐰</div>
-            <div class="font-display" style="font-size:1.05rem;">말랑이</div>
+            <div class="font-display" style="font-size:1.05rem;">{villager_name}</div>
           </div>
           <div style="display:flex;gap:6px;margin-top:12px;">
             <div style="flex:1;background:rgba(255,248,231,0.6);border:1px solid {P['border']};
