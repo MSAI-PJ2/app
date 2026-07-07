@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from api_client import explain_turn, get_session
+from demo_data import DEMO_USER_ID, DEMO_LOGIN_UID, demo_stats_rows
 from ui_theme import PALETTE as P
 from ui_theme import apply_theme, render_sidebar, render_topbar, require_consent
 
@@ -155,10 +156,21 @@ with st.expander("🔎 조회할 세션 ID", expanded=False):
         help="비워두면 현재 대화 세션(방금 대화하기에서 쓰던 session_id)을 사용합니다.")
 session_id = (session_id_input or default_session or "").strip()
 
-history = load_session_turns(session_id) if session_id else []
-using_sample = len(history) == 0
-if using_sample:
-    history = make_sample_data()
+# [데모 id 트리거] ① 데모 이메일로 로그인(user_id==DEMO_LOGIN_UID) ② 조회 세션 ID 에
+# DEMO_USER_ID 입력 — 둘 중 하나면 그 사용자의 세션들을 가로지른 집계 통계를 프론트 내장
+# 픽스처(실라벨·합성날짜)로 주입한다. 발화는 배포 분류기로 실제 라벨링했고 세션 볼륨·날짜만
+# 합성 — 라이브 Cosmos 파이프라인은 아님. (기관 '보고서' 토글은 위에서 st.stop 으로 끝나는
+# 별개 목업이라 데모 트리거가 아니다 — main 최신화로 관리자 토글→보고서 목업 채택)
+is_demo = (session_id == DEMO_USER_ID
+           or st.session_state.get("user_id") == DEMO_LOGIN_UID)
+if is_demo:
+    history = demo_stats_rows()
+    using_sample = False
+else:
+    history = load_session_turns(session_id) if session_id else []
+    using_sample = len(history) == 0
+    if using_sample:
+        history = make_sample_data()
 
 df_all = pd.DataFrame(history)
 df_all["timestamp"] = pd.to_datetime(df_all["timestamp"], utc=True).dt.tz_localize(None)
@@ -187,7 +199,11 @@ else:
 if df.empty:
     df = df_all  # 필터 결과가 없으면 전체 표시
 
-if using_sample:
+if is_demo:
+    from demo_data import DEMO_SESSION_COUNT
+    st.caption(f"🧪 데모 통계 — 사용자 `{DEMO_USER_ID}` 의 세션 {DEMO_SESSION_COUNT}개를 가로질러 집계한 "
+               f"기록 {len(df_all)}건(발화당 대표 왜곡). 기간 필터·분포는 실제로 동작합니다.")
+elif using_sample:
     if session_id:
         st.info(f"💡 세션 `{session_id[:8]}…` 에 저장된 대화 기록을 찾지 못했어요. 샘플 데이터로 미리 보여드려요.")
     else:
@@ -313,7 +329,8 @@ letters = "".join(
         <div style="font-weight:700;font-size:.9rem;">{(r.user_text[:28] + '…') if len(r.user_text) > 28 else r.user_text}</div>
         <span style="font-size:.72rem;color:{P['muted_fg']};white-space:nowrap;">{rel_date(r.timestamp)}</span>
       </div>
-      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
+      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+        {f'<span class="ac-chip chip-lilac">📁 {getattr(r, "session_name", "")}</span>' if getattr(r, "session_name", "") else ''}
         <span class="ac-chip chip-coral">{distortion_label(r.distortion)}</span>
         <span class="ac-chip chip-sky">{r.route}</span>
       </div>
@@ -359,7 +376,7 @@ st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
 # ── 연산 과정 보기 (SHAP) — 실제 세션 데이터가 있을 때만 노출 ─────
 # 캐싱하지 않고 버튼을 누를 때마다 백엔드(cogdist)에서 새로 계산한다 (팀 결정: 구현 단순성 우선).
-if not using_sample:
+if not using_sample and not is_demo:  # SHAP은 실제 게이트웨이 세션이 필요 — 데모 픽스처엔 미노출
     with st.expander("🔬 연산 과정 보기 — 분류기가 어떤 단어에 주목했는지"):
         st.caption("특정 발화를 골라 SHAP 값을 계산합니다. 매 요청마다 새로 계산되어 몇 초~수십 초 걸릴 수 있어요.")
         turn_rows = [r for r in history if r.get("turn_index") is not None]
