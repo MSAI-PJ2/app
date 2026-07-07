@@ -60,6 +60,20 @@ div[data-testid="stColumn"]:has(.pipeline-step) {
 # ('정상'은 왜곡이 없다는 뜻, '불충분'은 판단하기엔 정보가 부족하다는 뜻)
 NON_DISTORTION_LABELS = ("정상", "불충분")
 
+
+def selected_distortions(labels: list[dict]) -> list[str]:
+    """meta 이벤트의 labels(멀티라벨 전체)에서 실제 '선택된' 인지왜곡만 뽑는다.
+
+    분류기는 한 발화에 대해 primary(대표) 1개뿐 아니라 동시에 성립하는 왜곡을 모두
+    selected=True 로 표시한다(게이트웨이 selection_policy 가 threshold·배타규칙을 이미 적용).
+    - selected=True 인 라벨만 취한다 → 프론트가 threshold 를 알 필요 없음.
+    - '정상'·'불충분'은 라우팅 라벨(왜곡 아님)이라 집계에서 제외.
+    primary 하나만 세면 동시 왜곡이 유실되므로(백엔드 selected_labels 계약과 동일 취지)
+    왜곡 빈도 집계·배지는 이 목록을 쓴다.
+    """
+    return [l["label"] for l in labels
+            if l.get("selected") and l.get("label") not in NON_DISTORTION_LABELS]
+
 SIDO_OPTIONS = [
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
     "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도",
@@ -300,13 +314,21 @@ with col_side:
                unsafe_allow_html=True)
 
     # 최근 감지된 왜곡 — 이력 기반 프로그레스바 (chat.tsx 사이드 카드)
-    # '불충분'은 인지왜곡이 아니라 라우팅 라벨이므로 이 통계에서 제외한다.
-    hist = [h for h in st.session_state.distortion_history if h.get("distortion") not in NON_DISTORTION_LABELS]
+    # 멀티라벨: 한 발화에 동시 감지된 왜곡을 모두 펼쳐 빈도를 센다(primary만 세던 것에서 개선).
+    # 구버전 행('distortions' 없음)은 primary 로 폴백하되, '정상'·'불충분'은 왜곡이 아니므로 제외.
+    def _row_distortions(h):
+        ds = h.get("distortions")
+        if isinstance(ds, list) and ds:
+            return [d for d in ds if d not in NON_DISTORTION_LABELS]
+        d = h.get("distortion")
+        return [d] if d and d not in NON_DISTORTION_LABELS else []
+
+    all_d = [d for h in st.session_state.distortion_history for d in _row_distortions(h)]
     bar_tones = ["#E39A86", "#D9B8E8", "#C4DCEA", "#F3DD8F"]
-    if hist:
-        counts = Counter(h["distortion"] for h in hist).most_common(4)
-        total = sum(c for _, c in counts) or 1
-        rows = [(name, round(cnt / len(hist) * 100)) for name, cnt in counts]
+    if all_d:
+        counts = Counter(all_d).most_common(4)
+        total = len(all_d) or 1  # 분모 = 감지 건수 전체(멀티라벨) → 분포 비율
+        rows = [(name, round(cnt / total * 100)) for name, cnt in counts]
     else:
         rows = [("과잉일반화", 0), ("잘못된 명명", 0), ("감정적 추론", 0), ("당위적 진술", 0)]
 
@@ -321,7 +343,7 @@ with col_side:
 <div class="ac-card" style="padding:1.3rem;margin-bottom:0.45rem;">
   <div class="font-display" style="margin-bottom:10px;">🧠 최근 감지된 왜곡</div>
   {bars}
-  {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not hist else ''}
+  {'<div style="font-size:.72rem;color:' + P['muted_fg'] + ';">아직 대화 이력이 없어요</div>' if not all_d else ''}
 </div>""", unsafe_allow_html=True)
 
     # 🚨 위기 시 도움받기 (chat.tsx 사이드 카드 — 번호는 백엔드 EMERGENCY와 동일 체계)
@@ -372,6 +394,7 @@ if user_input:
 
     assistant_parts: list[str] = []
     primary = None
+    labels: list = []          # meta 이벤트의 멀티라벨 전체 — 후속 집계에서 selected 왜곡 추출
     confidence = 0.0
     is_crisis = False
     crisis_message = None
@@ -411,10 +434,14 @@ if user_input:
                     primary = event.get("primary")
                     labels = event.get("labels") or []
                     confidence = next((l["score"] for l in labels if l["label"] == primary), 0.0)
-                    if primary and primary not in NON_DISTORTION_LABELS:
-                        distortion_placeholder.markdown(
-                            f'<span class="distortion-badge">{primary}</span><br><small>신뢰도: {confidence:.0%}</small>',
-                            unsafe_allow_html=True)
+                    sel = selected_distortions(labels)  # 동시 감지된 왜곡 전체(정상/불충분 제외)
+                    if sel:
+                        score_of = {l["label"]: l.get("score", 0.0) for l in labels}
+                        badges = "<br>".join(
+                            f'<span class="distortion-badge">{d}</span>'
+                            f' <small>신뢰도 {score_of.get(d, 0.0):.0%}</small>'
+                            for d in sel)
+                        distortion_placeholder.markdown(badges, unsafe_allow_html=True)
                     elif primary:  # '불충분'·'정상'은 인지왜곡이 아니므로 왜곡 유형으로 표시하지 않는다
                         distortion_placeholder.caption("감지된 인지왜곡 없음")
 
@@ -471,7 +498,8 @@ if user_input:
         st.session_state.distortion_history.append({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "user_text": user_input,
-            "distortion": primary,
+            "distortion": primary,                        # 대표 라벨(하위호환·라우팅 표시)
+            "distortions": selected_distortions(labels),  # 동시 감지 왜곡 전체(집계용)
             "confidence": confidence,
             "route": route,
         })
@@ -487,7 +515,7 @@ elif input_mode == "🎙️ 음성" and audio_value is not None:
     render_pipeline(steps)
 
     transcript = None
-    assistant_parts, primary, confidence = [], None, 0.0
+    assistant_parts, primary, confidence, labels = [], None, 0.0, []
     is_crisis, crisis_message, error_message = False, None, None
     route = "STS"
     try:
@@ -552,6 +580,7 @@ elif input_mode == "🎙️ 음성" and audio_value is not None:
         st.session_state.distortion_history.append({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "user_text": transcript or "(음성 메시지)", "distortion": primary,
+            "distortions": selected_distortions(labels),  # 동시 감지 왜곡 전체(집계용)
             "confidence": confidence, "route": route,
         })
     st.rerun()
@@ -573,7 +602,7 @@ elif input_mode == "🖼️ 카톡 캡쳐" and image_value is not None:
     render_pipeline(steps)
 
     extracted_text = None
-    assistant_parts, primary, confidence = [], None, 0.0
+    assistant_parts, primary, confidence, labels = [], None, 0.0, []
     is_crisis, crisis_message, error_message = False, None, None
     route = "STS"
     try:
@@ -641,6 +670,7 @@ elif input_mode == "🖼️ 카톡 캡쳐" and image_value is not None:
         st.session_state.distortion_history.append({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "user_text": extracted_text or "(카톡 캡쳐)", "distortion": primary,
+            "distortions": selected_distortions(labels),  # 동시 감지 왜곡 전체(집계용)
             "confidence": confidence, "route": route,
         })
     st.rerun()

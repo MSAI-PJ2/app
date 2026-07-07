@@ -150,12 +150,17 @@ def load_session_turns(session_id: str) -> list[dict]:
         confidence = next((l["score"] for l in selected if l["label"] == primary), None)
         if confidence is None:
             confidence = 1.0  # 구버전 세션(selected_labels 없음) 폴백
+        # 멀티라벨: 게이트웨이가 이미 selected 된 라벨만 selected_labels 로 저장한다
+        # (정상/불충분 배타·threshold 는 백엔드 selection_policy 가 적용). 왜곡 여부 최종
+        # 필터(NON_DISTORTIONS)는 아래 집계부에서 일괄 처리한다 — 여기선 목록만 넘긴다.
+        distortions = [l["label"] for l in selected if l.get("label")]
         next_turn = turns[i + 1] if i + 1 < len(turns) else {}
         route = "RAG" if next_turn.get("rag_chunk_ids") else "STS"
         rows.append({
             "timestamp": t.get("ts") or state.get("updated_at"),
             "user_text": t.get("text", ""),
-            "distortion": primary,
+            "distortion": primary,          # 대표 라벨(라우팅 표시·이력표·편지 칩)
+            "distortions": distortions,     # 동시 감지 왜곡 전체(분포·최다왜곡 집계용)
             "confidence": confidence,
             "route": route,
             "turn_index": i,
@@ -229,7 +234,6 @@ st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
 # '불충분'(신호 부족)·'정상'·'미분류'는 인지왜곡 유형이 아니므로, 왜곡 지표
 # (최다 감지 왜곡·왜곡 유형 분포)에서는 제외한다. '대화' 총계·신뢰도는 전체 기준.
 NON_DISTORTIONS = ("불충분", "정상", "미분류")
-df_distortion = df[~df["distortion"].isin(NON_DISTORTIONS)]
 
 
 def distortion_label(d):
@@ -239,8 +243,24 @@ def distortion_label(d):
     return "왜곡 없음" if d in NON_DISTORTIONS else d
 
 
+# 멀티라벨 집계: 한 발화가 동시에 여러 인지왜곡을 가질 수 있다(분류기 selected_labels).
+# primary(대표 1개)만 세면 동시 왜곡이 누락되므로, 턴별 selected 왜곡을 모두 펼쳐서
+# 분포·최다왜곡을 집계한다. distortions 열이 없거나 비면(샘플/데모/구버전) primary 로
+# 폴백하며, 어느 경우든 정상/불충분/미분류는 왜곡이 아니라 제외한다.
+# ※ '대화 수'·'평균 신뢰도'·'날짜'·추이 그래프는 발화(턴) 단위 그대로 유지 — 집계 축이 다르다.
+def _explode_distortions(row):
+    ds = row.get("distortions")
+    if isinstance(ds, list) and ds:
+        return [d for d in ds if d not in NON_DISTORTIONS]
+    d = row["distortion"]
+    return [] if d in NON_DISTORTIONS else [d]
+
+dist_series = pd.Series(
+    [d for _, row in df.iterrows() for d in _explode_distortions(row)], dtype="object")
+
+
 # ── 통계 필 4개 (analytics.tsx Stat pills) ───────────────────────
-_dist_vc = df_distortion["distortion"].value_counts()
+_dist_vc = dist_series.value_counts()
 top_distortion = _dist_vc.index[0] if not _dist_vc.empty else "—"
 avg_conf = df["confidence"].mean()
 rag_ratio = (df["route"] == "RAG").mean()
@@ -289,7 +309,7 @@ with c_bar:
   </div>
 </div>""", unsafe_allow_html=True)
 
-    dist_counts = df_distortion["distortion"].value_counts().head(7).reset_index()
+    dist_counts = dist_series.value_counts().head(7).reset_index()
     dist_counts.columns = ["distortion", "count"]
     fig_bar = go.Figure(go.Bar(
         x=dist_counts["distortion"], y=dist_counts["count"],
