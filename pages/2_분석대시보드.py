@@ -24,14 +24,14 @@ CHART = P["chart"]
 GRID_COLOR = P["border"]
 FONT = dict(family="Nunito, sans-serif", color=P["muted_fg"], size=12)
 
-# ── 기관 보고서 보기 (토글) — 예시 환자 1명 기준, 전부 목업 데이터 ──
+# ── 기관 보고서 보기 (토글) — 예시 내담자 1명 기준, 전부 목업 데이터 ──
 # ⚠️ "관리자"라는 표현은 쓰지 않기로 결정 (유관기관에 가져가는 문서이므로 "보고서"로 통일)
 # st.stop()으로 여기서 끝내기 때문에 아래 개인용 코드는 전혀 안 건드려도 된다.
-admin_view = st.toggle("🏥 기관 제출용 보고서 보기 (환자)", key="report_view_toggle")
+admin_view = st.toggle("🏥 기관 제출용 보고서 보기 (내담자)", key="report_view_toggle")
 if admin_view:
     st.markdown(f"""
 <span class="ac-chip chip-sky">🏥 기관 제출용 보고서</span>
-<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">환자 기록 보고서</h1>
+<h1 style="margin:.4rem 0 .1rem;font-size:1.9rem;">내담자 기록 보고서</h1>
 """, unsafe_allow_html=True)
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
