@@ -88,6 +88,27 @@ def restore_session():
         if qp_uid:
             st.session_state.user_id = qp_uid
             st.session_state.is_logged_in = True
+    _seed_demo_consent()  # 데모 계정은 진입 경로(로그인/URL) 무관하게 동의 시드
+
+
+def _seed_demo_consent():
+    """[로컬 워크어라운드 — 커밋 금지] 데모 계정(demo@maeumgalpi.kr)에 한해 사전 질문
+    게이트(require_consent)를 통과하도록 필수 동의를 자동 시드한다. 시연에서 데모 계정이
+    설문에 막히지 않게 하는 용도 — 로그인 흐름·URL(?uid=) 진입 모두 커버한다.
+    데모 uid 가 정확히 일치할 때만 작동하므로 실제 사용자는 진짜 동의 게이트를 그대로 거친다.
+    (로그인 시 0_로그인.py 가 user_profile 을 게이트웨이 프로필로 덮으므로, apply_theme 가
+    매 rerun 최상단에서 이 함수를 호출해 그 다음 실행에서 동의를 다시 채워 넣는다.)"""
+    try:
+        from demo_data import DEMO_LOGIN_UID
+    except Exception:
+        return
+    if st.session_state.get("user_id") != DEMO_LOGIN_UID:
+        return
+    prof = st.session_state.get("user_profile") or {}
+    privacy = prof.get("privacy") or {}
+    if not (privacy.get("agreed_terms") and privacy.get("agreed_sensitive_profile")):
+        prof["privacy"] = {**privacy, "agreed_terms": True, "agreed_sensitive_profile": True}
+        st.session_state.user_profile = prof
 
 def apply_theme():
     restore_session()
